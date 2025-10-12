@@ -1,0 +1,60 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MailTrace Map</title>
+  <style>html,body,#map{height:100%;margin:0;padding:0} .pill{position:fixed;top:10px;left:10px;background:#111;color:#fff;padding:6px 10px;border-radius:999px;font:14px/1.2 system-ui}</style>
+  {% if use_mapbox %}
+    <!-- Mapbox GL (token provided) -->
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.css" rel="stylesheet">
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.js"></script>
+  {% else %}
+    <!-- Leaflet (no key required) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  {% endif %}
+</head>
+<body>
+<div id="map"></div>
+<div class="pill">{{ 'Mapbox' if use_mapbox else 'Leaflet + OpenStreetMap' }}</div>
+<script>
+(async function(){
+  // Load points
+  const res = await fetch('/map/data');
+  const fc = await res.json();
+  const feats = fc.features || [];
+  {% if use_mapbox %}
+    mapboxgl.accessToken = '{{ mapbox_token }}';
+    const map = new mapboxgl.Map({container: 'map', style:'mapbox://styles/mapbox/streets-v11', center: [-96.8,37.8], zoom: 3.5});
+    map.on('load', () => {
+      map.addSource('points', { type:'geojson', data: fc });
+      map.addLayer({ id:'pt', type:'circle', source:'points', paint:{ 'circle-radius': 4, 'circle-color':'#0ea5e9', 'circle-stroke-width':1, 'circle-stroke-color':'#0b4a6f' } });
+      if (feats.length) {
+        const b = new mapboxgl.LngLatBounds();
+        feats.forEach(f => b.extend(f.geometry.coordinates));
+        if (b.isEmpty()) return;
+        map.fitBounds(b, {padding:40, duration:0});
+      }
+    });
+  {% else %}
+    const map = L.map('map').setView([37.8,-96.8], 4);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution:'&copy; OpenStreetMap' }).addTo(map);
+    const pts = [];
+    feats.forEach(f => {
+      const [lon, lat] = f.geometry.coordinates;
+      pts.push([lat, lon]);
+      L.circleMarker([lat,lon], {radius:5}).addTo(map).bindPopup((f.properties.label||'') + '<br/>' + (f.properties.address||''));
+    });
+    if (pts.length){
+      const bounds = L.latLngBounds(pts);
+      map.fitBounds(bounds.pad(0.2));
+    } else {
+      // no data yet: center US
+      map.setView([37.8,-96.8], 4);
+    }
+  {% endif %}
+})();
+</script>
+</body>
+</html>

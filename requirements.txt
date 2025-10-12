@@ -1,0 +1,22 @@
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Migrate==4.1.0
+gunicorn==22.0.0
+boto3==1.34.132
+# psycopg2-binary==2.9.9    # disabled for Windows demo (SQLite)
+SQLAlchemy==2.0.31
+alembic==1.13.2
+python-dotenv==1.0.1
+stripe==9.8.0
+requests==2.32.3
+Authlib==1.3.1
+itsdangerous==2.2.0
+Jinja2==3.1.4
+Werkzeug==3.0.3
+numpy==2.1.3    # ensure compatible wheel on Windows
+pandas==2.2.3    # use wheel-friendly version on Windows
+# matplotlib==3.8.4    # disabled for Windows demo (no compiler needed)
+# pyarrow==16.1.0    # disabled for Windows demo (no compiler needed)
+
+azure-storage-blob==12.19.1
+rapidfuzz==3.9.7

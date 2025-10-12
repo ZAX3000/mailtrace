@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Runs</h2>
+<div class="card">
+  <table style="width:100%; border-collapse:collapse">
+    <thead><tr><th align="left">Started</th><th align="left">Mail</th><th align="left">Matches</th><th align="left">Dashboard</th></tr></thead>
+    <tbody>
+      {% for it in items %}
+      <tr>
+        <td>{{ it.ts }}</td><td>{{ it.mail }}</td><td>{{ it.matches }}</td>
+        <td><a class="btn" href="{{ it.url }}">Open</a></td>
+      </tr>
+      {% endfor %}
+      {% if not items %}
+      <tr><td colspan="4" class="muted">No runs yet.</td></tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
