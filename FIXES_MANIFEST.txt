@@ -1,8 +1,0 @@
-- alembic.ini: full logging sections
-- alembic/env.py: sys.path shim + guarded fileConfig + target_metadata=db.metadata
-- docker/entrypoint.sh: export PYTHONPATH and run alembic before gunicorn
-- Added run_local_minimal.bat (simple, stays open)
-- Replaced scripts/run_debug_watch.ps1 (parse-safe)
-- Updated run_debug_watch_ALWAYS_OPEN.bat to NoExit
-- azure/azure.env.sample: WEBSITES_PORT=8000
-- Removed packaged .venv/ from zip to keep it clean

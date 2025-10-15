@@ -1,0 +1,17 @@
+{
+  // Treat our Flask templates as Jinja, not plain HTML
+  "files.associations": {
+    "**/app/templates/**/*.html": "jinja-html",
+    "*.jinja": "jinja-html",
+    "*.j2": "jinja-html"
+  },
+
+  // Allow templating syntax inside HTML
+  "html.format.templating": true,
+
+  // Optional: quiet bogus JS errors inside <script> in templates only
+  // (JS linting still works in real .js/.ts files)
+  "html.validate.scripts": false,
+
+  "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+}
