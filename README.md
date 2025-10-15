@@ -286,20 +286,19 @@ That’s it—you’re in a production-like dev environment with Postgres, migra
    └─ README.md                 # this file
    ```
 
-2. **Appendix: Quick demo (no login)**
+2. **Appendix: Click‑By‑Click Demo (No Tech Skills Needed)**
    A tiny “how to click around” for PMs/stakeholders.
 
    ```md
    ## Appendix B — Quick demo (no login)
-
-   1. In `.env`, set `DISABLE_AUTH=1`.
-   2. Start DB: `docker compose up -d db`
-   3. Migrate: `python -m alembic upgrade head`
-   4. Run: `python -m flask run --reload`
-   5. Open http://127.0.0.1:5000/
-   6. Go to **Upload** → select the two Excel files (CRM + Address list).
-   7. View **Dashboard** for match counts and charts.
-   8. Download **Exports** to review matched results.
+    1) Start DB: `docker compose up -d db`  
+    2) Migrate: `python -m alembic upgrade head`  
+    3) Disable auth: set `DISABLE_AUTH=1` in your `.env`  
+    4) Run: `python -m flask run --reload`  
+    5) Open http://127.0.0.1:5000/  
+    6) Go to **Upload** → select the two sample spreadsheets (CRM + Addresses) from `app/static/samples/`.  
+    7) Watch the dashboard populate (KPIs, charts, results table).  
+    8) Use filters / city/zip links to explore.
    ```
 
 3. **Changelog (recent)**
