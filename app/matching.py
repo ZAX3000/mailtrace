@@ -1,59 +1,25 @@
 from __future__ import annotations
+import os
 import re
+import json
 from datetime import datetime, date
-from difflib import SequenceMatcher
+from typing import Any, List, Tuple, Optional
 
-# --- MATCHING ENGINE ADAPTER (RapidFuzz preferred) ---
-import os as _os
+import pandas as pd
+from rapidfuzz import fuzz  # RapidFuzz only
 
-def _mt_clean(_s):
+def _mt_clean(_s: Any) -> str:
     if _s is None:
         return ""
-    _s = str(_s).strip()
-    return _s
+    return str(_s).strip()
 
+# Runtime threshold control (optional)
 try:
-    from rapidfuzz import fuzz as _mt_fuzz
-    _FUZZ_ENGINE = "rapidfuzz"
-
-    def _mt_ratio(a, b):
-        # Token-set handles order/duplicates better than plain ratio
-        return _mt_fuzz.token_set_ratio(_mt_clean(a), _mt_clean(b)) / 100.0
-
-except Exception:  # rapidfuzz not available -> fallback
-    from difflib import SequenceMatcher as _MT_SM
-    _FUZZ_ENGINE = "difflib"
-
-    def _mt_ratio(a, b):
-        return _MT_SM(None, _mt_clean(a).lower(), _mt_clean(b).lower()).ratio()
-
-class _CompatSequenceMatcher:
-    def __init__(self, _junk, a, b):
-        self.a = a
-        self.b = b
-    def ratio(self):
-        return _mt_ratio(self.a, self.b)
-
-# Override the imported SequenceMatcher symbol for the rest of this module
-SequenceMatcher = _CompatSequenceMatcher
-
-# Optional runtime threshold control
-try:
-    MATCH_MIN_SCORE = float(_os.getenv("MATCH_MIN_SCORE", "").strip() or "0")
+    MATCH_MIN_SCORE = float((os.getenv("MATCH_MIN_SCORE") or "").strip() or "0")
 except Exception:
     MATCH_MIN_SCORE = 0.0
 
-try:
-    print(f"[matching] Fuzzy engine: {_FUZZ_ENGINE}")
-except Exception:
-    pass
-
-from typing import List, Tuple, Optional
-import pandas as pd
-import json
-import os
-
-# --- Normalization dictionaries ---
+# --- Address normalization helpers ---
 STREET_TYPES = {
     "street":"street","st":"street","st.":"street",
     "road":"road","rd":"road","rd.":"road",
@@ -71,7 +37,7 @@ STREET_TYPES = {
     "trail":"trail","trl":"trail","trl.":"trail",
     "alley":"alley","aly":"alley","aly.":"alley",
     "common":"common","cmn":"common","cmn.":"common",
-    "park":"park"
+    "park":"park",
 }
 DIRECTIONALS = {
     "n":"north","n.":"north","north":"north",
@@ -136,7 +102,6 @@ def parse_date_any(s: str) -> Optional[date]:
             return datetime.strptime(z, fmt).date()
         except Exception:
             continue
-    # Try pandas
     try:
         d = pd.to_datetime(s, errors="coerce")
         if pd.isna(d): return None
@@ -147,8 +112,9 @@ def parse_date_any(s: str) -> Optional[date]:
 def fmt_mm_dd_yy(d: Optional[date]) -> str:
     return d.strftime("%m-%d-%y") if isinstance(d, date) else "None provided"
 
+# --- RapidFuzz scoring (token-set is robust to order/dups) ---
 def _ratio(a: str, b: str) -> float:
-    return SequenceMatcher(None, a, b).ratio()
+    return fuzz.token_set_ratio(_mt_clean(a), _mt_clean(b)) / 100.0
 
 def address_similarity(a1: str, b1: str) -> float:
     na, nb = normalize_address1(a1), normalize_address1(b1)
@@ -193,7 +159,7 @@ def score_row(mail_row: pd.Series, crm_row: pd.Series) -> Tuple[int, List[str]]:
         return 100, ["perfect match"]
     return min(100, score), notes
 
-def _canon_columns(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
+def _canon_columns(df: pd.DataFrame, mapping: dict[str, list[str]]) -> pd.DataFrame:
     d = df.copy()
     d.columns = [c.lower().strip() for c in d.columns]
     for want, alts in mapping.items():
@@ -206,6 +172,9 @@ def _canon_columns(df: pd.DataFrame, mapping: dict) -> pd.DataFrame:
         if key not in d.columns:
             d[key] = ""
     return d
+
+# Collect “skipped” rows for UI (optional JSON artifact)
+excluded_rows_collect: list[dict[str, Any]] = []
 
 def run_matching(mail_df: pd.DataFrame, crm_df: pd.DataFrame) -> pd.DataFrame:
     mail_df = _canon_columns(mail_df, {
@@ -235,18 +204,31 @@ def run_matching(mail_df: pd.DataFrame, crm_df: pd.DataFrame) -> pd.DataFrame:
 
     mail_groups = {k: g for k, g in mail_df.groupby("_blk")}
 
-    out_rows: List[dict] = []
+    out_rows: List[dict[str, Any]] = []
     for _, c in crm_df.iterrows():
         blk = c["_blk"]
         candidates = mail_groups.get(blk)
         if candidates is None or candidates.empty:
+            excluded_rows_collect.append({
+                "crm_id": c.get("crm_id", ""),
+                "reason": "no_block_candidates",
+                "block": blk,
+                "address1": c.get("address1", ""),
+                "postal_code": str(c.get("postal_code", "")),
+            })
             continue
 
+        cand = candidates
         if c["_date"]:
             cand = candidates[(candidates["_date"].isna()) | (candidates["_date"] <= c["_date"])]
-        else:
-            cand = candidates
         if cand.empty:
+            excluded_rows_collect.append({
+                "crm_id": c.get("crm_id", ""),
+                "reason": "no_date_window_candidates",
+                "block": blk,
+                "address1": c.get("address1", ""),
+                "postal_code": str(c.get("postal_code", "")),
+            })
             continue
 
         best = None
@@ -254,7 +236,13 @@ def run_matching(mail_df: pd.DataFrame, crm_df: pd.DataFrame) -> pd.DataFrame:
         best_notes: List[str] = []
         for _, m in cand.iterrows():
             s, notes = score_row(m, c)
-            if s > best_score or (s == best_score and (m.get("_date") or date.min) < (best.get("_date") if best is not None else date.max)):
+            m_date_val = m.get("_date")
+            best_date_val: Optional[date] = best.get("_date") if best is not None else None
+
+            m_date_cmp: date = m_date_val if isinstance(m_date_val, date) else date.min
+            best_date_cmp: date = best_date_val if isinstance(best_date_val, date) else date.max
+
+            if s > best_score or (s == best_score and m_date_cmp < best_date_cmp):
                 best, best_score, best_notes = m, s, notes
 
         prior_dates = []
@@ -263,6 +251,9 @@ def run_matching(mail_df: pd.DataFrame, crm_df: pd.DataFrame) -> pd.DataFrame:
             prior_dates.append(d if isinstance(d, date) else None)
         prior_sorted = [d for d in sorted([d for d in prior_dates if d is not None])]
         mail_dates_list = ", ".join(fmt_mm_dd_yy(d) for d in prior_sorted) if prior_sorted else "None provided"
+
+        if best is None:
+            continue
 
         full_mail = " ".join([
             str(best.get("address1", "")).strip(),
@@ -289,16 +280,14 @@ def run_matching(mail_df: pd.DataFrame, crm_df: pd.DataFrame) -> pd.DataFrame:
             "match_notes": ("; ".join(best_notes) if best_notes else "perfect match"),
         })
 
-
-    # --- write excluded rows JSON for dashboard panel (no-DB option) ---
+    # Optional artifact for dashboard panel (no-DB)
     try:
         _static_dir = os.path.join(os.path.dirname(__file__), "static")
         os.makedirs(_static_dir, exist_ok=True)
         _json_path = os.path.join(_static_dir, "excluded_latest.json")
         with open(_json_path, "w", encoding="utf-8") as f:
             json.dump(excluded_rows_collect, f, ensure_ascii=False)
-    except Exception as _e:
-        # non-fatal
+    except Exception:
         pass
 
     return pd.DataFrame(out_rows)

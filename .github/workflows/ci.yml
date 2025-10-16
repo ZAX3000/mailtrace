@@ -1,41 +1,60 @@
 name: CI
 on:
-  push: { branches: [ "main" ] }
-  pull_request: { branches: [ "main" ] }
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
 
 jobs:
   ci:
     runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+      DATABASE_URL: postgresql+psycopg://mailtrace:devpass@localhost:5432/mailtrace
+      FLASK_ENV: testing
+      DISABLE_AUTH: "1"
+
     services:
       postgres:
         image: postgres:16
         env:
           POSTGRES_USER: mailtrace
-          POSTGRES_PASSWORD: mailtrace
+          POSTGRES_PASSWORD: devpass
           POSTGRES_DB: mailtrace
-        ports: ["5432:5432"]
+        ports:
+          - "5432:5432"
         options: >-
-          --health-cmd="pg_isready -U mailtrace"
-          --health-interval=5s --health-timeout=5s --health-retries=10
-    env:
-      DATABASE_URL: postgresql+psycopg://mailtrace:mailtrace@localhost:5432/mailtrace
-      FLASK_ENV: testing
-      DISABLE_AUTH: "1"
+          --health-cmd="pg_isready -U mailtrace -d mailtrace -h localhost"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: { python-version: "3.11", cache: "pip" }
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
       - name: Install deps
         run: |
           python -m pip install -U pip
           pip install -r requirements.txt
           pip install pytest ruff black mypy alembic psycopg[binary]
+
       - name: DB migrate
-        run: alembic upgrade head
+        run: |
+          # Small buffer after healthcheck just to be safe
+          sleep 3
+          alembic upgrade head
+
       - name: Lint (non-blocking during refactor)
         run: ruff check .
         continue-on-error: true
+
       - name: Type check
         run: mypy app
+
       - name: Tests
         run: pytest -q

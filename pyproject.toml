@@ -1,0 +1,47 @@
+[tool.mypy]
+python_version = "3.11"
+pretty = true
+warn_unused_ignores = true
+explicit_package_bases = true
+namespace_packages = true
+
+# Default: don't force annotations everywhere (legacy files are chatty)
+disallow_untyped_defs = false
+no_implicit_optional = true
+strict_optional = true
+
+# 3rd-party libs that lack or have noisy stubs
+[[tool.mypy.overrides]]
+module = ["matplotlib", "matplotlib.*", "boto3", "botocore.*", "authlib.*", "flask_migrate"]
+ignore_missing_imports = true
+
+# Be strict on the modules we care about NOW (and future services/)
+[[tool.mypy.overrides]]
+module = [
+  "app.matching",
+  "app.api_jobs",
+  "app.extensions",
+  "app.services.*",
+  "app.repositories.*",
+]
+disallow_untyped_defs = true
+no_implicit_optional = true
+strict_optional = true
+
+# Silence legacy UI/route files for now (we’ll type them during the refactor)
+[[tool.mypy.overrides]]
+module = [
+  "app.dashboard_export",
+  "app.static_bp",
+  "app.assets_bp",
+  "app.assets_proxy",
+  "app.runs",
+  "app.mapview",
+  "app.dashboard_routes",
+  "app.health",
+  "app.billing",
+  "app.auth",
+  "app.__init__",
+  "app.models",
+]
+ignore_errors = true
