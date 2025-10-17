@@ -1,4 +1,3 @@
-from .assets_proxy import assets_bp
 import os
 from flask import Flask, redirect, url_for, send_from_directory
 from .config import Config
