@@ -1,0 +1,144 @@
+/* ===== MailTrace Dashboard – Base layout, tokens, tables ===== */
+
+:root {
+  /* palette + layout tokens */
+  --bg:#0b1220;
+  --card:#111827;
+  --ink:#e5eef9;
+  --muted:#9fb2c8;
+  --accent:#60a5fa;
+  --line:#233049;
+
+  /* summary column widths */
+  --col-mail-addr: 240px;
+  --col-mail-unit: 84px;
+  --col-crm-addr:  240px;
+  --col-crm-unit:  84px;
+  --col-city:      160px;
+  --col-state:     72px;
+  --col-zip:       108px;
+  --col-maildates: 260px;
+  --col-crmdate:   130px;
+  --col-amount:    120px;
+  --col-conf:      110px;
+  --col-notes:     300px;
+
+  /* confidence colors */
+  --conf-green: #16a34a; /* green-600 */
+  --conf-yellow: #d97706; /* amber-600 */
+  --conf-red: #dc2626; /* red-600 */
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: rgba(11,18,32,.9);
+  backdrop-filter: blur(6px);
+}
+header .brand { font-weight: 600; letter-spacing: .3px; }
+
+.wrap { max-width: 1100px; margin: 0 auto; padding: 18px; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; }
+
+.kpi { min-width: 140px; text-align: center; }
+.kpi .v { font-size: 22px; font-weight: 700; }
+.kpi .l { font-size: 12px; color: var(--muted); }
+
+.section { margin-top: 18px; }
+label.small { font-size: 12px; color: var(--muted); }
+input[type="file"] { display: block; margin: 6px 0 10px 0; }
+select, input[type="checkbox"] { margin-left: 6px; }
+
+button {
+  background: #2563eb; color: #fff; border: none;
+  padding: 10px 14px; border-radius: 10px; font-weight: 600; cursor: pointer;
+}
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+.err {
+  display: none; background: #3b0f12; border: 1px solid #ef4444;
+  color: #fecaca; padding: 8px 10px; border-radius: 10px; margin: 10px 0;
+}
+
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th, td { border-bottom: 1px solid var(--line); padding: 8px 6px; text-align: left; }
+th { color: var(--muted); font-weight: 600; }
+canvas { width: 100%; height: 260px; display: block; }
+
+.right { margin-left: auto; }
+.muted { color: var(--muted); }
+.yoy { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+
+/* Right-align Amount & Confidence columns in Summary */
+#cmp-summary td:nth-child(10), #cmp-summary th:nth-child(10),
+#cmp-summary td:nth-child(11), #cmp-summary th:nth-child(11) { text-align: right; }
+
+/* ===== Summary table sizing + sticky header ===== */
+#cmp-summary .table-wrap {
+  height: 520px;
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-gutter: stable both-edges;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  position: relative;
+}
+#cmp-summary thead th {
+  position: sticky; top: 0; background: var(--card);
+  z-index: 3; box-shadow: 0 1px 0 0 var(--line);
+}
+#cmp-summary table {
+  border-collapse: separate; border-spacing: 0;
+  width: max-content; min-width: 1400px; table-layout: fixed;
+}
+
+#cmp-summary th:nth-child(1),  #cmp-summary td:nth-child(1)  { min-width: var(--col-mail-addr); }
+#cmp-summary th:nth-child(2),  #cmp-summary td:nth-child(2)  { min-width: var(--col-mail-unit); text-align: center; }
+#cmp-summary th:nth-child(3),  #cmp-summary td:nth-child(3)  { min-width: var(--col-crm-addr); }
+#cmp-summary th:nth-child(4),  #cmp-summary td:nth-child(4)  { min-width: var(--col-crm-unit); text-align: center; }
+#cmp-summary th:nth-child(5),  #cmp-summary td:nth-child(5)  { min-width: var(--col-city); }
+#cmp-summary th:nth-child(6),  #cmp-summary td:nth-child(6)  { min-width: var(--col-state); text-align: center; }
+#cmp-summary th:nth-child(7),  #cmp-summary td:nth-child(7)  { min-width: var(--col-zip); text-align: center; }
+#cmp-summary th:nth-child(8),  #cmp-summary td:nth-child(8)  { min-width: var(--col-maildates); }
+#cmp-summary th:nth-child(9),  #cmp-summary td:nth-child(9)  { min-width: var(--col-crmdate); }
+#cmp-summary th:nth-child(10), #cmp-summary td:nth-child(10) { min-width: var(--col-amount); text-align: right; }
+#cmp-summary th:nth-child(11), #cmp-summary td:nth-child(11) { min-width: var(--col-conf);   text-align: right; }
+#cmp-summary th:nth-child(12), #cmp-summary td:nth-child(12) { min-width: var(--col-notes); }
+
+/* Floating header table */
+#cmp-summary .floating-head { position: sticky; top: 0; left: 0; z-index: 6; background: var(--card); }
+#cmp-summary .floating-head thead th { background: var(--card); border-bottom: 1px solid var(--line); }
+#cmp-summary .table-wrap { position: relative; }
+#cmp-summary table.floating-head { table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+
+/* ===== Top lists ===== */
+#cmp-top .topwrap { max-height: 170px; overflow-y: auto; overflow-x: hidden; }
+#cmp-top thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+
+/* ===== Confidence color coding ===== */
+#cmp-summary td.conf-green, #cmp-summary td.conf.conf-green { color: var(--conf-green) !important; font-weight: 600; }
+#cmp-summary td.conf-yellow, #cmp-summary td.conf.conf-yellow { color: var(--conf-yellow) !important; font-weight: 600; }
+#cmp-summary td.conf-red, #cmp-summary td.conf.conf-red { color: var(--conf-red) !important; font-weight: 600; }
+
+/* ===== Top lists: column sizing + centered numeric columns ===== */
+.topwrap table[data-kind="cities"],
+.topwrap table[data-kind="zips"] { table-layout: fixed; width: 100%; }
+.topwrap table[data-kind="cities"] th:first-child,
+.topwrap table[data-kind="cities"] td:first-child { width: 140px; }
+.topwrap table[data-kind="zips"] th:first-child,
+.topwrap table[data-kind="zips"] td:first-child { width: 140px; }

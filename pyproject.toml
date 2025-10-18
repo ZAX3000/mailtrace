@@ -32,9 +32,7 @@ strict_optional = true
 [[tool.mypy.overrides]]
 module = [
   "app.dashboard_export",
-  "app.static_bp",
   "app.assets_bp",
-  "app.assets_proxy",
   "app.runs",
   "app.mapview",
   "app.dashboard_routes",

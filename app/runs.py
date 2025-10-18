@@ -74,7 +74,7 @@ def upload_form():
 @login_required
 def landing():
     
-    return redirect(url_for('dashboard.dashboard_view'))
+    return redirect(url_for('dashboard.index'))
 
 def upload():
     uid = session.get("user_id")
@@ -209,4 +209,4 @@ def upload():
     # Render run dashboard
     # Store run_id in session for convenience and redirect to server-rendered dashboard
     session['last_run_id'] = run.id
-    return redirect(url_for('dashboard.dashboard_view', run_id=run.id))
+    return redirect(url_for('dashboard.index', run_id=run.id))

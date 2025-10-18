@@ -1,17 +1,47 @@
 {
-  // Treat our Flask templates as Jinja, not plain HTML
+  // --- Formatting behavior ---
+  "editor.formatOnSave": true,
+
+  // Use the built-in HTML formatter specifically for Jinja templates
+  "[jinja-html]": {
+    "editor.defaultFormatter": "vscode.html-language-features",
+    "editor.formatOnSave": true
+  },
+
+  // Use Prettier for everything else where it shines
+  "[html]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[css]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[scss]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[javascriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescript]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[typescriptreact]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+  "[json]": { "editor.defaultFormatter": "esbenp.prettier-vscode" },
+
+  // Only run Prettier where a config exists (optional, but nice in mixed stacks)
+  "prettier.requireConfig": true,
+
+  // --- Treat our Flask templates as Jinja, not plain HTML ---
   "files.associations": {
+    "**/templates/**/*.html": "jinja-html",
     "**/app/templates/**/*.html": "jinja-html",
     "*.jinja": "jinja-html",
     "*.j2": "jinja-html"
   },
 
-  // Allow templating syntax inside HTML
+  // Let Emmet work inside Jinja templates
+  "emmet.includeLanguages": {
+    "jinja-html": "html"
+  },
+
+  // Make the HTML formatter tolerant of templating syntax
   "html.format.templating": true,
 
-  // Optional: quiet bogus JS errors inside <script> in templates only
-  // (JS linting still works in real .js/.ts files)
-  "html.validate.scripts": false,
+  // Optional: if VS Code complains about inline <script> in templates, you can silence it:
+  // "html.validate.scripts": false,
 
+  // --- Python (adjust for your OS/venv layout) ---
   "python.defaultInterpreterPath": "${workspaceFolder}\\.venv\\Scripts\\python.exe"
+  // On macOS/Linux, use:
+  // "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python"
 }

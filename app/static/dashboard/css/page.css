@@ -1,0 +1,28 @@
+/* Per-page tweaks for the dashboard */
+
+/* quick “YoY” button */
+.yoy-btn {
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  padding: 6px 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 12px;
+  color: #334155;
+}
+
+/* local positioning for charts/cards */
+#panel-graph,
+.graph-card {
+  position: relative;
+}
+
+/* temporarily hide the strictness section on this page */
+.strictness,
+#strictness,
+[data-section='strictness'] {
+  display: none !important;
+}

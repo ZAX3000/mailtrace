@@ -42,7 +42,7 @@ def login():
     if current_app.config.get("DISABLE_AUTH"):
         session["user_id"] = "demo-user"
         session["email"] = "demo@example.com"
-        return redirect(url_for("dashboard.dashboard_view"))
+        return redirect(url_for("dashboard.index"))
     redirect_uri = url_for("auth.callback", _external=True)
     return oauth.auth0.authorize_redirect(redirect_uri)
 
@@ -60,7 +60,7 @@ def callback():
 
     session["user_id"] = str(user.id)
     session["email"] = email
-    return redirect(url_for("dashboard.dashboard_view"))
+    return redirect(url_for("dashboard.index"))
 
 @auth_bp.get("/logout")
 def logout():
