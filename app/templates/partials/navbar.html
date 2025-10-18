@@ -1,0 +1,26 @@
+<nav class="mt-nav" role="navigation" aria-label="Main">
+    <div class="wrap">
+        <div class="left logo">
+            <a href="{{ url_for('dashboard.index') }}">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="MailTrace logo">
+            </a>
+        </div>
+
+        <div class="right">
+            <a href="{{ url_for('dashboard.index') }}" id="mt-link-dash"
+                class="{{ 'active' if request.endpoint == 'dashboard.index' else '' }}">Dashboard</a>
+
+            {# adjust to your map blueprint/route name #}
+            <a href="{{ url_for('map.index') }}" id="mt-link-map"
+                class="{{ 'active' if request.endpoint and request.endpoint.startswith('map.') else '' }}">Map</a>
+
+            <div class="hist" id="mt-hist">
+                <button class="hist-btn" type="button" aria-haspopup="true" aria-expanded="false">History ▾</button>
+                <div class="hist-panel" role="menu">
+                    <div class="hist-empty" id="mt-hist-empty">Loading…</div>
+                    <div id="mt-hist-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</nav>

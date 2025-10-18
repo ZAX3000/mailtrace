@@ -1,0 +1,55 @@
+/* --- MailTrace Navbar (light) --- */
+.mt-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: #fff;
+  border-bottom: 1px solid #ececec;
+}
+
+.mt-nav .wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mt-nav .left { display: flex; align-items: center; gap: 12px; }
+.mt-nav .right { display: flex; align-items: center; gap: 18px; }
+
+.mt-nav a {
+  text-decoration: none;
+  color: #111;
+  font-weight: 500;
+  font-size: 14px;
+}
+.mt-nav a.active { color: #0a66ff; }
+
+.mt-nav .logo { display: flex; align-items: center; gap: 10px; }
+/* default logo size */
+.mt-nav .logo img { height: 56px; max-height: 56px; width: auto; }
+
+/* history popover */
+.mt-nav .hist { position: relative; }
+.mt-nav .hist-btn { cursor: pointer; }
+.mt-nav .hist-panel {
+  position: absolute;
+  right: 0; top: 28px;
+  width: 320px; max-height: 360px; overflow: auto;
+  background: #fff; border: 1px solid #e5e5e5; border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08); padding: 8px; display: none;
+}
+.mt-nav .hist.open .hist-panel { display: block; }
+.mt-nav .hist-item {
+  padding: 8px 10px; border-radius: 6px;
+  display: flex; justify-content: space-between; gap: 10px; font-size: 13px;
+}
+.mt-nav .hist-item:hover { background: #f6f7f9; }
+.mt-nav .hist-empty { padding: 10px; color: #777; font-size: 13px; }
+
+/* variant tweaks that were inline */
+.mt-nav .logo img { height: 64px; max-height: 64px; width: auto; }
+.mt-nav .wrap { padding: 6px 16px; }

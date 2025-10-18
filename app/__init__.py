@@ -9,7 +9,6 @@ from .auth import auth_bp
 from .billing import billing_bp
 from .mapview import map_bp
 from .health import health_bp
-from .assets_bp import assets_bp
 
 def create_app():
     app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), "static"))
@@ -20,7 +19,6 @@ def create_app():
     migrate.init_app(app, db)
 
     # blueprints
-    app.register_blueprint(assets_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(runs_bp)

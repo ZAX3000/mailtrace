@@ -4,24 +4,24 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{ title or "MailTrace" }}</title>
 <link rel="icon" type="image/png" href="/static/logo.png">
-<style>
-:root{
-  --bg:#f7f8fa; --bg-2:#ffffff; --ink:#0f1c2e; --muted:#6b7280;
-  --brand:#0b3a66; --card:#ffffff; --stroke:#e5e7eb; --accent:#16a34a;
-}
-*{box-sizing:border-box}
-body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink);}
-.app{display:flex; min-height:100vh;}
-.sidebar{width:240px; background:var(--bg-2); border-right:1px solid var(--stroke); padding:16px;}
-.sidebar .brand{display:flex; align-items:center; gap:8px; font-weight:900; margin-bottom:16px; color:var(--accent); text-decoration:none;}
-.sidebar .brand img{width:28px; height:28px; border-radius:6px;}
-.sidebar nav a{display:block; padding:10px 12px; margin:6px 0; color:var(--ink); text-decoration:none; border-radius:8px;}
-.sidebar nav a:hover{background:#0b1a36}
-.main{flex:1; padding:20px; overflow:auto;}
-.card{background:var(--card); border:1px solid var(--stroke); border-radius:12px; padding:16px;}
-.btn{display:inline-block; background:var(--brand); color:white; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; border:none; cursor:pointer;}
-.muted{color:var(--muted);}
-</style>
+  <style>
+  :root{
+    --bg:#f7f8fa; --bg-2:#ffffff; --ink:#0f1c2e; --muted:#6b7280;
+    --brand:#0b3a66; --card:#ffffff; --stroke:#e5e7eb; --accent:#16a34a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink);}
+  .app{display:flex; min-height:100vh;}
+  .sidebar{width:240px; background:var(--bg-2); border-right:1px solid var(--stroke); padding:16px;}
+  .sidebar .brand{display:flex; align-items:center; gap:8px; font-weight:900; margin-bottom:16px; color:var(--accent); text-decoration:none;}
+  .sidebar .brand img{width:28px; height:28px; border-radius:6px;}
+  .sidebar nav a{display:block; padding:10px 12px; margin:6px 0; color:var(--ink); text-decoration:none; border-radius:8px;}
+  .sidebar nav a:hover{background:#0b1a36}
+  .main{flex:1; padding:20px; overflow:auto;}
+  .card{background:var(--card); border:1px solid var(--stroke); border-radius:12px; padding:16px;}
+  .btn{display:inline-block; background:var(--brand); color:white; padding:10px 14px; border-radius:8px; text-decoration:none; font-weight:800; border:none; cursor:pointer;}
+  .muted{color:var(--muted);}
+  </style>
 </head>
 <body>
 <div class="app">
