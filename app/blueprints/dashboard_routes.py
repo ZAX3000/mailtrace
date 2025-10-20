@@ -1,4 +1,4 @@
-# app/dashboard_routes.py
+# app/dashboard_routes.py web controller for dashboard pages
 from flask import Blueprint, render_template, request, session
 from .auth import login_required
 

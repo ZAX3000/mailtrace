@@ -4,12 +4,9 @@ class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev")
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///local.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    AWS_REGION = os.environ.get("AWS_REGION", "us-east-1")
-    AWS_S3_BUCKET = os.environ.get("AWS_S3_BUCKET", "")
-    APP_BASE_URL = os.environ.get("APP_BASE_URL", "http://localhost:5000")
 
-    # Storage backend (azure|aws|local)
-    STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "azure")
+    # Storage backend (azure|local)
+    STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "local")
     # Azure Blob Storage
     AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "")
     AZURE_STORAGE_CONTAINER = os.environ.get("AZURE_STORAGE_CONTAINER", "")

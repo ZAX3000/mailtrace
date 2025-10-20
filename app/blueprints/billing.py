@@ -1,7 +1,7 @@
 import json, os, time
 from flask import Blueprint, current_app, request, jsonify, redirect, url_for, session
-from .extensions import stripe, db
-from .models import Subscription, User
+from ..extensions import stripe, db
+from ..models import Subscription, User
 
 billing_bp = Blueprint("billing", __name__)
 
