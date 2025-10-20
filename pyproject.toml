@@ -5,41 +5,52 @@ warn_unused_ignores = true
 explicit_package_bases = true
 namespace_packages = true
 
-# Default: don't force annotations everywhere (legacy files are chatty)
+# Be sane by default; we'll dial strictness per-module
 disallow_untyped_defs = false
 no_implicit_optional = true
 strict_optional = true
+# check_untyped_defs = true  # enable later if you want bodies of untyped defs checked
 
-# 3rd-party libs that lack or have noisy stubs
-[[tool.mypy.overrides]]
-module = ["matplotlib", "matplotlib.*", "boto3", "botocore.*", "authlib.*", "flask_migrate"]
-ignore_missing_imports = true
-
-# Be strict on the modules we care about NOW (and future services/)
+# 3rd-party libs with noisy/absent typing
 [[tool.mypy.overrides]]
 module = [
-  "app.matching",
-  "app.api_jobs",
-  "app.extensions",
+  "matplotlib",
+  "matplotlib.*",
+  "boto3",
+  "botocore.*",
+  "authlib.*",
+  "flask_migrate",
+  # Uncomment ONLY if you don't use the importlib Any shim:
+  # "pandas",
+  # "pandas.*",
+  # "requests",
+]
+ignore_missing_imports = true
+
+# Be strict where it matters now
+[[tool.mypy.overrides]]
+module = [
   "app.services.*",
   "app.repositories.*",
+  "app.extensions",
+  "app.blueprints.api_jobs",
+  "app.services.matching",
 ]
 disallow_untyped_defs = true
 no_implicit_optional = true
 strict_optional = true
 
-# Silence legacy UI/route files for now (we’ll type them during the refactor)
+# Temporarily relax legacy UI/route files (fix paths)
 [[tool.mypy.overrides]]
 module = [
-  "app.dashboard_export",
-  "app.assets_bp",
-  "app.runs",
-  "app.map",
-  "app.dashboard_routes",
-  "app.health",
-  "app.billing",
-  "app.auth",
+  "app.blueprints.dashboard_routes",
+  "app.blueprints.runs",
+  "app.blueprints.map",
+  "app.blueprints.health",
+  "app.blueprints.billing",
+  "app.blueprints.auth",
   "app.__init__",
   "app.models",
+  "app.dashboard_export",
 ]
 ignore_errors = true

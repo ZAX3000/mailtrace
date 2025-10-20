@@ -17,31 +17,21 @@ from .blueprints.billing import billing_bp
 from .blueprints.map import map_bp
 from .blueprints.health import health_bp
 
-# Local storage only (MVP)
 from .services.storage import LocalStorage
-
-# Optional CLI (map cache)
-try:
-    from .services.map_cache import build_map_cache
-except Exception:
-    build_map_cache = None
-
+from .services.map_cache import build_map_cache            # <- import directly; no try/except
+from .typing_ext import MailTraceFlask                     # <- typed Flask subclass
 
 def register_cli(app: Flask) -> None:
     @app.cli.command("build-map-cache")
     @click.option("--limit", default=1000, show_default=True, help="Max points to include")
     def build_map_cache_cmd(limit: int):
         """Build the cached GeoJSON used by /map/data."""
-        if build_map_cache is None:
-            click.echo("map_cache service not available", err=True)
-            raise SystemExit(1)
         with app.app_context():
-            path = build_map_cache(limit=limit)
+            path = build_map_cache(limit=limit)            # <- now matches signature
             click.echo(f"Wrote {path}")
 
-
 def create_app() -> Flask:
-    app = Flask(
+    app = MailTraceFlask(                                  # <- use typed subclass
         __name__,
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
         template_folder=os.path.join(os.path.dirname(__file__), "templates"),
@@ -49,18 +39,14 @@ def create_app() -> Flask:
     )
     app.config.from_object(Config)
 
-    # Ensure instance/ exists (used for uploads, etc.)
     os.makedirs(app.instance_path, exist_ok=True)
 
-    # Init extensions
     db.init_app(app)
     migrate.init_app(app, db)
 
-    # Local uploads root
     uploads_root = os.path.join(app.instance_path, "uploads")
-    app.storage = LocalStorage(uploads_root)
+    app.storage = LocalStorage(uploads_root)               # <- mypy now happy
 
-    # Blueprints
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(runs_bp)
@@ -69,7 +55,6 @@ def create_app() -> Flask:
     app.register_blueprint(map_bp)
     app.register_blueprint(health_bp)
 
-    # CLI
     register_cli(app)
 
     @app.route("/")
