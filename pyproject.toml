@@ -34,7 +34,7 @@ module = [
   "app.dashboard_export",
   "app.assets_bp",
   "app.runs",
-  "app.mapview",
+  "app.map",
   "app.dashboard_routes",
   "app.health",
   "app.billing",

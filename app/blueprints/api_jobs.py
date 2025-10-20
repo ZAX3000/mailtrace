@@ -11,9 +11,9 @@ import pandas as pd
 from flask import Blueprint, jsonify, request, session
 from flask.typing import ResponseReturnValue
 
-from .matching import run_matching
-from .extensions import db
-from .models import Run, Match
+from ..services.matching import run_matching
+from ..extensions import db
+from ..models import Run, Match
 
 
 def dev_safe_api(f: Callable[..., Any]) -> Callable[..., ResponseReturnValue]:
