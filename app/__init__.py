@@ -10,7 +10,7 @@ from .extensions import db, migrate
 
 # Blueprints
 from .blueprints.dashboard_routes import dashboard_bp
-from .blueprints.api_jobs import api_bp
+from .blueprints.api import api_bp
 from .blueprints.runs import runs_bp
 from .blueprints.auth import auth_bp
 from .blueprints.billing import billing_bp
@@ -20,6 +20,9 @@ from .blueprints.health import health_bp
 from .services.storage import LocalStorage
 from .services.map_cache import build_map_cache            # <- import directly; no try/except
 from .typing_ext import MailTraceFlask                     # <- typed Flask subclass
+from dotenv import load_dotenv
+
+load_dotenv()  # pip install python-dotenv, once per venv
 
 def register_cli(app: Flask) -> None:
     @app.cli.command("build-map-cache")
