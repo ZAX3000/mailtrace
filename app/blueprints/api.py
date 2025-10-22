@@ -4,12 +4,12 @@ from __future__ import annotations
 import os
 import threading
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 from functools import wraps
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple, cast
 
 import pandas as pd
-from flask import Blueprint, current_app, jsonify, request, session
+from flask import Blueprint, current_app, jsonify, request, session, Flask
 from flask.typing import ResponseReturnValue
 from werkzeug.utils import secure_filename
 from sqlalchemy import text
@@ -95,7 +95,9 @@ def ingest_mail() -> ResponseReturnValue:
 
     tmp_dir = os.path.join(current_app.instance_path, "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    tmp_path = os.path.join(tmp_dir, secure_filename(file.filename) or "mail.csv")
+    raw = file.filename or "mail.csv"
+    name = secure_filename(raw) or "mail.csv"
+    tmp_path = os.path.join(tmp_dir, name)
     file.save(tmp_path)
 
     engine = db.engine
@@ -119,7 +121,9 @@ def ingest_crm() -> ResponseReturnValue:
 
     tmp_dir = os.path.join(current_app.instance_path, "tmp")
     os.makedirs(tmp_dir, exist_ok=True)
-    tmp_path = os.path.join(tmp_dir, secure_filename(file.filename) or "crm.csv")
+    raw2 = file.filename or "crm.csv"
+    name2 = secure_filename(raw2) or "crm.csv"
+    tmp_path = os.path.join(tmp_dir, name2)
     file.save(tmp_path)
 
     engine = db.engine
@@ -214,7 +218,7 @@ def _persist_matches(df: pd.DataFrame, user_id: Optional[uuid.UUID], run: Run) -
     inserted = 0
     skipped = 0
 
-    def _parse_date_str(s: str) -> Optional[datetime.date]:
+    def _parse_date_str(s: str) -> Optional[date]:
         try:
             d = pd.to_datetime(s, errors="coerce")
             if pd.isna(d):
@@ -233,12 +237,15 @@ def _persist_matches(df: pd.DataFrame, user_id: Optional[uuid.UUID], run: Run) -
             skipped += 1
             continue
 
+        raw_val = r.get("job_value") if "job_value" in r else None
+        job_value = pd.to_numeric("" if raw_val is None else raw_val, errors="coerce") if "job_value" in r else None
+
         m = Match(
             run_id=run.id,
             user_id=user_id,
             crm_id=_norm(r.get("crm_id")),
             crm_job_date=_parse_date_str(_norm(r.get("crm_job_date"))),
-            job_value=pd.to_numeric(r.get("job_value"), errors="coerce") if "job_value" in r else None,
+            job_value=job_value,
             matched_mail_full_address=_norm(r.get("matched_mail_full_address")),
             mail_dates_in_window=_norm(r.get("mail_dates_in_window")),
             mail_count_in_window=int(r.get("mail_count_in_window") or 0),
@@ -278,7 +285,8 @@ def match_start() -> ResponseReturnValue:
     except Exception:
         uid_val = None
 
-    app = current_app._get_current_object()
+    # Use LocalProxy as Flask for typing; proxy forwards at runtime
+    app = cast(Flask, current_app)
     job_id = str(uuid.uuid4())
     _set_job_progress(job_id, percent=1, phase="loading", status="running")
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import csv
 from datetime import datetime
-from typing import Tuple, Iterable, List, Dict, Any
+from typing import Iterable, List, Dict, Any, Tuple
 
 from sqlalchemy.engine import Engine
 from sqlalchemy import text
@@ -13,24 +13,38 @@ from .staging_common import assert_postgres
 SCHEMA = "staging"
 TABLE = f"{SCHEMA}.crm"
 
-CANON_COLS = ["crm_id","address1","address2","city","state","postal_code","job_date","job_value"]
-# crm_id & job_value are optional; these are the required AFTER aliasing
-REQUIRED = {"address1","city","state","postal_code","job_date"}
+CANON_COLS = [
+    "crm_id",
+    "address1",
+    "address2",
+    "city",
+    "state",
+    "postal_code",
+    "job_date",
+    "job_value",
+]
+# crm_id & job_value are optional; these are required AFTER aliasing
+REQUIRED: set[str] = {"address1", "city", "state", "postal_code", "job_date"}
 
-ALIASES = {
-    "crm_id": ["crm_id","id","lead_id","job_id"],
-    "address1": ["address1","addr1","address 1","address","street","line1","line 1"],
-    "address2": ["address2","addr2","address 2","unit","line2","apt","apartment","suite","line 2"],
-    "city": ["city","town"],
-    "state": ["state","st"],
-    "postal_code": ["postal_code","zip","zipcode","zip_code","zip code"],
-    "job_date": ["job_date","date","created_at","job date"],
-    "job_value": ["job_value","amount","value","revenue","job value"],
+ALIASES: Dict[str, List[str]] = {
+    "crm_id": ["crm_id", "id", "lead_id", "job_id"],
+    "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
+    "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
+    "city": ["city", "town"],
+    "state": ["state", "st"],
+    "postal_code": ["postal_code", "zip", "zipcode", "zip_code", "zip code"],
+    "job_date": ["job_date", "date", "created_at", "job date"],
+    "job_value": ["job_value", "amount", "value", "revenue", "job value"],
 }
 
 DATE_FORMATS = [
-    "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y",
-    "%Y/%m/%d", "%m/%d/%y", "%d-%m-%y"
+    "%Y-%m-%d",
+    "%m/%d/%Y",
+    "%m-%d-%Y",
+    "%d-%m-%Y",
+    "%Y/%m/%d",
+    "%m/%d/%y",
+    "%d-%m-%y",
 ]
 
 
@@ -42,8 +56,8 @@ def _parse_date_to_iso(s: str) -> str:
     for fmt in DATE_FORMATS:
         try:
             return datetime.strptime(z, fmt).date().isoformat()
-        except Exception:
-            pass
+        except ValueError:
+            continue
     return ""
 
 
@@ -53,7 +67,9 @@ def ensure_staging_crm(engine: Engine) -> None:
     with engine.begin() as conn:
         # Schema + base table
         conn.execute(text(f"CREATE SCHEMA IF NOT EXISTS {SCHEMA}"))
-        conn.execute(text(f"""
+        conn.execute(
+            text(
+                f"""
             CREATE TABLE IF NOT EXISTS {TABLE} (
                 crm_id      TEXT NULL,
                 address1    TEXT NOT NULL,
@@ -64,10 +80,14 @@ def ensure_staging_crm(engine: Engine) -> None:
                 job_date    DATE NOT NULL,
                 job_value   NUMERIC(12,2) NULL
             )
-        """))
+            """
+            )
+        )
 
         # Generated (stored) normalized columns
-        conn.execute(text(f"""
+        conn.execute(
+            text(
+                f"""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -110,10 +130,14 @@ def ensure_staging_crm(engine: Engine) -> None:
                       ADD COLUMN zip5 TEXT GENERATED ALWAYS AS (left(postal_code, 5)) STORED;
                 END IF;
             END$$;
-        """))
+            """
+            )
+        )
 
         # Lookup/filter index
-        conn.execute(text(f"""
+        conn.execute(
+            text(
+                f"""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -126,10 +150,14 @@ def ensure_staging_crm(engine: Engine) -> None:
                       ON {TABLE} (address1_norm, city_norm, state_norm, zip5, job_date);
                 END IF;
             END$$;
-        """))
+            """
+            )
+        )
 
         # UNIQUE INDEX for dedupe on normalized fields + date + crm_id
-        conn.execute(text(f"""
+        conn.execute(
+            text(
+                f"""
             DO $$
             BEGIN
                 IF NOT EXISTS (
@@ -143,7 +171,9 @@ def ensure_staging_crm(engine: Engine) -> None:
                       ON {TABLE} (address1_norm, address2_norm, city_norm, state_norm, zip5, job_date, crm_id);
                 END IF;
             END$$;
-        """))
+            """
+            )
+        )
 
 
 def truncate_crm(engine: Engine) -> None:
@@ -156,14 +186,20 @@ def count_crm(engine: Engine) -> int:
         return int(conn.scalar(text(f"SELECT COUNT(*) FROM {TABLE}")) or 0)
 
 
-def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set]:
-    lower = [h.strip().lower() for h in in_headers]
-    used = set()
+def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[str]]:
+    """
+    Build a mapping from original CSV headers to canonical names using ALIASES.
+    Returns (mapping, missing_required_after_aliasing).
+    """
+    headers_list = list(in_headers)                      # make indexable
+    lower = [h.strip().lower() for h in headers_list]
+    used: set[str] = set()
     mapping: Dict[str, str] = {}
     for canon, alts in ALIASES.items():
         for a in alts:
             if a in lower:
-                mapping[in_headers[lower.index(a)]] = canon
+                src = headers_list[lower.index(a)]
+                mapping[src] = canon
                 used.add(canon)
                 break
     missing = REQUIRED - used
@@ -188,11 +224,13 @@ def copy_crm_csv_path(engine: Engine, csv_path: str, *, truncate: bool = False) 
         if not b:
             return
         placeholders = ", ".join(f":{c}" for c in CANON_COLS)
-        sql = text(f"""
+        sql = text(
+            f"""
             INSERT INTO {TABLE} ({", ".join(CANON_COLS)})
             VALUES ({placeholders})
             ON CONFLICT (address1_norm, address2_norm, city_norm, state_norm, zip5, job_date, crm_id) DO NOTHING
-        """)
+            """
+        )
         with engine.begin() as conn:
             conn.execute(sql, b)
         b.clear()
@@ -200,13 +238,6 @@ def copy_crm_csv_path(engine: Engine, csv_path: str, *, truncate: bool = False) 
     with open(csv_path, "r", encoding="utf-8", newline="") as f:
         reader = csv.reader(f)
         headers = next(reader, [])
-        # delete debug
-        print("DEBUG CRM HEADERS RAW:", repr(headers))
-        from . import staging_crm as _sc
-        print("DEBUG CRM ALIASES[job_date]:", getattr(_sc, "ALIASES", {}).get("job_date"))
-        mapping, missing = _canon_header_map(headers)
-        print("DEBUG CRM MAPPING:", mapping, "MISSING:", missing)
-        # delete debug
         mapping, missing = _canon_header_map(headers)
         if missing:
             raise RuntimeError(f"Missing required columns after aliasing: {', '.join(sorted(missing))}")
@@ -226,23 +257,25 @@ def copy_crm_csv_path(engine: Engine, csv_path: str, *, truncate: bool = False) 
             # Parse date + coerce numeric
             job_date_iso = _parse_date_to_iso(get_val(row, "job_date")) or None
             raw_val = get_val(row, "job_value")
-            job_value_val = None
+            job_value_val: float | None = None
             if raw_val:
                 try:
                     job_value_val = float(raw_val.replace(",", ""))
-                except Exception:
+                except ValueError:
                     job_value_val = None
 
-            batch.append({
-                "crm_id": get_val(row, "crm_id"),
-                "address1": get_val(row, "address1"),
-                "address2": get_val(row, "address2"),
-                "city": get_val(row, "city"),
-                "state": get_val(row, "state"),
-                "postal_code": get_val(row, "postal_code"),
-                "job_date": job_date_iso,
-                "job_value": job_value_val,
-            })
+            batch.append(
+                {
+                    "crm_id": get_val(row, "crm_id"),
+                    "address1": get_val(row, "address1"),
+                    "address2": get_val(row, "address2"),
+                    "city": get_val(row, "city"),
+                    "state": get_val(row, "state"),
+                    "postal_code": get_val(row, "postal_code"),
+                    "job_date": job_date_iso,
+                    "job_value": job_value_val,
+                }
+            )
 
             if len(batch) >= BATCH:
                 flush_batch(batch)
