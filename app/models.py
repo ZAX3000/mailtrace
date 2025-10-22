@@ -1,7 +1,7 @@
 from .extensions import db
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
-from datetime import datetime, date
+from datetime import datetime
 from sqlalchemy import Index
 
 class User(db.Model):
