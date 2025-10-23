@@ -1,8 +1,8 @@
 <nav class="mt-nav" role="navigation" aria-label="Main">
     <div class="wrap">
         <div class="left logo">
-            <a href="{{ url_for('dashboard.index') }}">
-                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="MailTrace logo">
+            <a href="{{ url_for('dashboard.index') }}" aria-label="MailTrace home">
+                <img class="mt-logo" src="{{ url_for('static', filename='img/logo.svg') }}" alt="MailTrace logo">
             </a>
         </div>
 
@@ -10,7 +10,6 @@
             <a href="{{ url_for('dashboard.index') }}" id="mt-link-dash"
                 class="{{ 'active' if request.endpoint == 'dashboard.index' else '' }}">Dashboard</a>
 
-            {# adjust to your map blueprint/route name #}
             <a href="{{ url_for('map.index') }}" id="mt-link-map"
                 class="{{ 'active' if request.endpoint and request.endpoint.startswith('map.') else '' }}">Map</a>
 

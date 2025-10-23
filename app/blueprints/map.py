@@ -12,12 +12,16 @@ from app.services.map_cache import cached_payload_if_exists, build_map_cache
 map_bp = Blueprint("map", __name__, url_prefix="/map")
 
 
-@map_bp.get("/")
+# app/blueprints/map.py
+@map_bp.route('/', strict_slashes=False)
 @login_required
-def index() -> str:
-    token = (current_app.config.get("MAPBOX_TOKEN") or "").strip()
-    use_mapbox = bool(token)
-    return render_template("map.html", use_mapbox=use_mapbox, mapbox_token=token)
+def index():
+    token = current_app.config.get("MAPBOX_TOKEN", "")
+    return render_template(
+        "map.html",
+        use_mapbox=bool(token),
+        mapbox_token=token,
+    )
 
 
 @map_bp.get("/data")

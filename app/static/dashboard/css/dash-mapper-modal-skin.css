@@ -1,0 +1,517 @@
+/* ============== DASH MAPPER MODAL ============== */
+/* Vars (fallbacks) */
+:root{
+  --dash-blue:var(--brand-blue,#173b64);
+  --dash-panel:var(--dash-light,var(--dash-bg-light,#E6F1FF));
+  --dash-text:var(--text-900,#0b2942);
+  --dash-muted:var(--text-500,#6b7f93);
+  --dash-border:rgba(0,0,0,.10);
+  --dash-accent:var(--brand-orange,#b45309);
+  --dash-success:var(--brand-green,#176a4d);
+  --dash-shadow:0 12px 40px rgba(0,0,0,.12);
+  /* v2 extras */
+  --mapper-bg: var(--dash-bg-light, #f5f9ff);   /* JS can sync to --dash-panel */
+  --mapper-card:#ffffff;
+  --mapper-shadow:0 16px 48px rgba(0,0,0,.16);
+  --mapper-ring:color-mix(in oklab,var(--dash-blue) 22%, transparent);
+}
+
+/* ---------- BASE MODAL SKIN (scoped) ---------- */
+.dash-mapper-modal{
+  background:var(--dash-panel)!important;
+  color:var(--dash-text)!important;
+  border:1px solid var(--dash-border);
+  border-radius:14px;
+  box-shadow:var(--dash-shadow);
+  padding:18px 18px 14px;
+}
+
+.dash-mapper-modal h1,
+.dash-mapper-modal h2,
+.dash-mapper-modal .title{
+  color:var(--dash-blue);
+  font:700 16px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+  margin:0 0 8px 0;
+}
+
+.dash-mapper-modal p,
+.dash-mapper-modal .subtitle,
+.dash-mapper-modal .hint{
+  color:var(--dash-muted);
+  font-size:12px;
+  margin:4px 0 12px;
+}
+
+.dash-mapper-modal .section-title{
+  margin-top:10px;
+  font:600 12px/1.2 system-ui;
+  color:var(--dash-blue);
+}
+
+/* Inputs */
+.dash-mapper-modal input[type="text"],
+.dash-mapper-modal input[type="search"],
+.dash-mapper-modal select,
+.dash-mapper-modal textarea{
+  background:#fff;
+  color:var(--dash-text);
+  border:1px solid var(--dash-border);
+  border-radius:10px;
+  padding:8px 10px;
+  outline:none;
+}
+.dash-mapper-modal input:focus,
+.dash-mapper-modal select:focus,
+.dash-mapper-modal textarea:focus{
+  border-color:color-mix(in oklab,var(--dash-blue) 50%,#ffffff 50%);
+  box-shadow:0 0 0 3px color-mix(in oklab,var(--dash-blue) 20%, transparent);
+}
+
+/* Buttons */
+.dash-mapper-modal .btn,
+.dash-mapper-modal button{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  border-radius:999px;
+  padding:8px 14px;
+  border:1px solid var(--dash-border);
+  background:#fff;
+  color:var(--dash-blue);
+  font-weight:600;
+  font-size:12px;
+  cursor:pointer;
+}
+.dash-mapper-modal .btn.primary{background:var(--dash-blue);color:#fff;border-color:transparent;}
+.dash-mapper-modal .btn.ghost{background:transparent;color:var(--dash-blue);}
+.dash-mapper-modal .footer{display:flex;justify-content:flex-end;gap:8px;margin-top:12px;}
+
+/* Badges */
+.dash-mapper-modal .badge{
+  display:inline-block;padding:3px 8px;border-radius:999px;
+  font-size:11px;border:1px solid var(--dash-border);background:#fff;color:var(--dash-text);
+}
+.dash-mapper-modal .badge.required{
+  background:color-mix(in oklab,var(--dash-accent) 12%,#fff 88%);
+  color:var(--dash-accent);
+  border-color:color-mix(in oklab,var(--dash-accent) 30%,#fff 70%);
+}
+.dash-mapper-modal .badge.optional{
+  background:color-mix(in oklab,var(--dash-success) 12%,#fff 88%);
+  color:var(--dash-success);
+  border-color:color-mix(in oklab,var(--dash-success) 30%,#fff 70%);
+}
+
+/* Backdrop */
+.dash-mapper-backdrop{
+  background:rgba(11,41,66,.35)!important;
+  position:fixed; inset:0; pointer-events:none;
+}
+
+/* ---------- “SECTIONS” SKIN (keeps inner groups light) ---------- */
+.dash-mapper-modal .section,
+.dash-mapper-modal .panel,
+.dash-mapper-modal .card,
+.dash-mapper-modal .group,
+.dash-mapper-modal fieldset,
+.dash-mapper-modal .ant-card,
+.dash-mapper-modal .chakra-card,
+.dash-mapper-modal .MuiPaper-root{
+  background:var(--dash-panel)!important;
+  color:var(--dash-text)!important;
+  border:1px solid var(--dash-border)!important;
+  border-radius:12px!important;
+  padding:12px!important;
+}
+.dash-mapper-modal input[type="text"],
+.dash-mapper-modal input[type="search"],
+.dash-mapper-modal select,
+.dash-mapper-modal textarea{
+  background:#fff!important;
+  color:var(--dash-text)!important;
+}
+
+/* ---------- POLISH V1 (dimensions & subtle visuals) ---------- */
+.dash-mapper-modal{
+  border-radius:16px!important;
+  padding:18px 20px 14px!important;
+  width:min(92vw,980px)!important;
+  max-height:min(80vh,760px)!important;
+  overflow:auto!important;
+}
+.dash-mapper-modal h1,
+.dash-mapper-modal h2,
+.dash-mapper-modal .title{
+  font:700 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif!important;
+  margin:0 0 6px 0!important; letter-spacing:.2px!important;
+}
+.dash-mapper-modal h3,
+.dash-mapper-modal .section-title{
+  display:inline-block!important;
+  background:#fff!important; color:var(--dash-blue)!important;
+  border:1px solid var(--dash-border)!important;
+  border-radius:999px!important; padding:6px 10px!important;
+  font:600 12px/1 system-ui!important; margin:12px 0 8px!important;
+}
+.dash-mapper-modal .card,
+.dash-mapper-modal .panel,
+.dash-mapper-modal .group,
+.dash-mapper-modal fieldset,
+.dash-mapper-modal .ant-card,
+.dash-mapper-modal .chakra-card,
+.dash-mapper-modal .MuiPaper-root,
+.dash-mapper-modal .box,
+.dash-mapper-modal [class*="card"],
+.dash-mapper-modal [class*="panel"]{
+  background:#fff!important; color:var(--dash-text)!important;
+  border:1px solid var(--dash-border)!important;
+  border-radius:14px!important; padding:12px!important;
+  box-shadow:0 4px 14px rgba(0,0,0,.05)!important;
+}
+.dash-mapper-modal small,
+.dash-mapper-modal .example,
+.dash-mapper-modal .help-text{ color:var(--dash-muted)!important; font-size:11px!important; }
+.dash-mapper-modal .btn,
+.dash-mapper-modal button{ /* reaffirm polish v1 visuals */ }
+
+/* Remove any dark nested blocks */
+.dash-mapper-modal .bg-dark,
+.dash-mapper-modal .bg-primary,
+.dash-mapper-modal .bg-blue,
+.dash-mapper-modal [class*="bg-dark"],
+.dash-mapper-modal [class*="bg-blue"]{ background:#fff!important; }
+
+/* ---------- POLISH V2 (authoritative final overrides) ---------- */
+.dash-mapper-modal{
+  background:var(--mapper-bg)!important;
+  color:var(--dash-text)!important;
+  border:0!important;
+  border-radius:18px!important;
+  box-shadow:var(--mapper-shadow)!important;
+  padding:20px 22px 16px!important;
+  width:min(96vw,980px)!important;
+  max-height:min(84vh,760px)!important;
+  overflow:auto!important;
+}
+
+/* Header & subtitle */
+.dash-mapper-modal h1,
+.dash-mapper-modal h2,
+.dash-mapper-modal .title{
+  color:var(--dash-blue)!important;
+  font:700 18px/1.25 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif!important;
+  margin:0 0 4px 0!important; letter-spacing:.2px!important;
+}
+.dash-mapper-modal .subtitle,
+.dash-mapper-modal p.hint,
+.dash-mapper-modal .hint{
+  color:var(--dash-muted)!important; font-size:12px!important; margin:2px 0 12px!important;
+}
+
+/* Layout grid for Mail/CRM blocks */
+.dash-mapper-modal .mapper-grid{
+  display:grid!important; grid-template-columns:1fr 1fr; gap:14px; margin-top:10px;
+}
+@media (max-width:900px){
+  .dash-mapper-modal .mapper-grid{ grid-template-columns:1fr; }
+}
+
+/* Section pills */
+.dash-mapper-modal .section-title,
+.dash-mapper-modal h3{
+  display:inline-block!important;
+  background:var(--mapper-card)!important; color:var(--dash-blue)!important;
+  border-radius:999px!important; padding:6px 10px!important;
+  font:600 12px/1 system-ui!important; margin:6px 0 8px!important;
+  box-shadow:0 0 0 1px var(--dash-border) inset!important;
+}
+
+/* Cards — lighter */
+.dash-mapper-modal .mapper-card{
+  background:var(--mapper-card)!important; color:var(--dash-text)!important;
+  border:0!important; border-radius:14px!important; padding:14px!important;
+  box-shadow:0 2px 10px rgba(0,0,0,.06)!important;
+}
+
+/* Form elements */
+.dash-mapper-modal label{
+  display:block; margin:8px 0 4px; font:600 12px/1.2 system-ui!important; color:var(--dash-blue)!important;
+}
+.dash-mapper-modal input[type="text"],
+.dash-mapper-modal input[type="search"],
+.dash-mapper-modal input[type="number"],
+.dash-mapper-modal select,
+.dash-mapper-modal textarea{
+  background:#fff!important; color:var(--dash-text)!important;
+  border:1px solid var(--dash-border)!important; border-radius:10px!important;
+  padding:8px 10px!important; outline:none!important; height:36px!important; box-shadow:none!important;
+}
+.dash-mapper-modal textarea{ min-height:64px!important; }
+.dash-mapper-modal select{
+  appearance:none;
+  background-image:
+    linear-gradient(45deg,transparent 50%,var(--dash-blue) 50%),
+    linear-gradient(135deg,var(--dash-blue) 50%,transparent 50%);
+  background-position:calc(100% - 16px) calc(1em + 2px), calc(100% - 12px) calc(1em + 2px);
+  background-size:4px 4px, 4px 4px; background-repeat:no-repeat; padding-right:28px!important;
+}
+.dash-mapper-modal input:focus,
+.dash-mapper-modal select:focus,
+.dash-mapper-modal textarea:focus{
+  border-color:color-mix(in oklab,var(--dash-blue) 55%,#ffffff 45%)!important;
+  box-shadow:0 0 0 3px var(--mapper-ring)!important;
+}
+
+/* Buttons */
+.dash-mapper-modal .btn,
+.dash-mapper-modal button{
+  display:inline-flex!important; align-items:center!important; gap:8px!important;
+  border-radius:999px!important; padding:8px 14px!important;
+  border:1px solid var(--dash-border)!important; background:#fff!important;
+  color:var(--dash-blue)!important; font-weight:600!important; font-size:12px!important; cursor:pointer!important;
+}
+.dash-mapper-modal .btn.primary,
+.dash-mapper-modal .primary,
+.dash-mapper-modal .confirm{ background:var(--dash-blue)!important;color:#fff!important;border-color:transparent!important; }
+.dash-mapper-modal .btn.ghost,
+.dash-mapper-modal .secondary{ background:transparent!important;color:var(--dash-blue)!important; }
+
+/* Footer / actions */
+.dash-mapper-modal .footer,
+.dash-mapper-modal .actions,
+.dash-mapper-modal .modal-footer{
+  background:transparent!important; border-top:0!important;
+  display:flex!important; justify-content:flex-end!important; gap:8px!important; margin-top:14px!important;
+}
+
+/* Clean separators & dark leftovers */
+.dash-mapper-modal hr,
+.dash-mapper-modal .divider{ border:0!important; height:0!important; margin:0!important; }
+.dash-mapper-modal [class*="bg-dark"],
+.dash-mapper-modal .bg-primary,
+.dash-mapper-modal .bg-blue{ background:var(--mapper-card)!important; }
+
+/* ===== BORDERLESS VARIANT (opt-in) ===========================
+   Usage: add class "borderless" to the same element that has
+   "dash-mapper-modal" (e.g., <div class="dash-mapper-modal borderless">)
+   ============================================================ */
+
+.dash-mapper-modal.borderless,
+.dash-mapper-modal.borderless * {
+  border: 0 !important;
+}
+
+/* Shell */
+.dash-mapper-modal.borderless {
+  background: var(--mapper-bg) !important;
+  color: var(--dash-text) !important;
+  border-radius: 18px !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .16) !important;
+  padding: 20px 22px 16px !important;
+  width: min(96vw, 980px) !important;
+  max-height: min(84vh, 760px) !important;
+  overflow: auto !important;
+}
+
+/* Section titles: pill, no borders */
+.dash-mapper-modal.borderless .section-title,
+.dash-mapper-modal.borderless h3 {
+  display: inline-block !important;
+  background: var(--mapper-card) !important;
+  color: var(--dash-blue) !important;
+  border-radius: 999px !important;
+  padding: 6px 10px !important;
+  font: 600 12px/1 system-ui !important;
+  margin: 6px 0 8px !important;
+  /* soft shadow instead of borders */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06) !important;
+}
+
+/* Cards: borderless, soft shadow */
+.dash-mapper-modal.borderless .mapper-card {
+  background: var(--mapper-card) !important;
+  color: var(--dash-text) !important;
+  border-radius: 14px !important;
+  padding: 14px !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .05) !important;
+}
+
+/* Inputs/selects/textareas: borderless but keep focus ring */
+.dash-mapper-modal.borderless input[type="text"],
+.dash-mapper-modal.borderless input[type="search"],
+.dash-mapper-modal.borderless input[type="number"],
+.dash-mapper-modal.borderless select,
+.dash-mapper-modal.borderless textarea {
+  background: #fff !important;
+  color: var(--dash-text) !important;
+  border-radius: 10px !important;
+  padding: 8px 10px !important;
+  height: 36px !important;
+  box-shadow: none !important;
+}
+.dash-mapper-modal.borderless textarea { min-height: 64px !important; }
+
+.dash-mapper-modal.borderless select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--dash-blue) 50%),
+    linear-gradient(135deg, var(--dash-blue) 50%, transparent 50%);
+  background-position: calc(100% - 16px) calc(1em + 2px),
+                      calc(100% - 12px) calc(1em + 2px);
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  padding-right: 28px !important;
+}
+
+/* Accessible focus ring (no border) */
+.dash-mapper-modal.borderless input:focus,
+.dash-mapper-modal.borderless select:focus,
+.dash-mapper-modal.borderless textarea:focus {
+  box-shadow: 0 0 0 3px var(--mapper-ring) !important;
+}
+
+/* Buttons: borderless with gentle shadow */
+.dash-mapper-modal.borderless .btn,
+.dash-mapper-modal.borderless button {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  border-radius: 999px !important;
+  padding: 8px 14px !important;
+  background: #fff !important;
+  color: var(--dash-blue) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  cursor: pointer !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06) !important;
+}
+.dash-mapper-modal.borderless .btn.primary,
+.dash-mapper-modal.borderless .primary,
+.dash-mapper-modal.borderless .confirm {
+  background: var(--dash-blue) !important;
+  color: #fff !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, .12) !important;
+}
+
+/* Remove HR/dividers; kill dark strips */
+.dash-mapper-modal.borderless hr,
+.dash-mapper-modal.borderless .divider {
+  display: none !important;
+}
+.dash-mapper-modal.borderless [class*="bg-dark"],
+.dash-mapper-modal.borderless .bg-primary,
+.dash-mapper-modal.borderless .bg-blue {
+  background: transparent !important;
+}
+
+/* ===== Mapper: "Clear saved mapping" pill ===== */
+.dash-mapper-modal .mapper-clear{
+  --dash-blue: var(--brand-blue, #173b64);
+  --dash-soft: color-mix(in oklab, var(--dash-blue) 12%, #ffffff 88%);
+  background: var(--dash-soft) !important;
+  color: var(--dash-blue) !important;
+  border: 0 !important;
+  border-radius: 10px !important;
+  padding: 8px 12px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06) !important;
+  text-decoration: none !important;
+}
+.dash-mapper-modal .mapper-clear:hover { filter: brightness(0.98); }
+
+/* ===== Mapper action bar: layout + neutral background ===== */
+.dash-mapper-modal .mapper-actions,
+.dash-mapper-modal .footer,
+.dash-mapper-modal .modal-footer,
+.dash-mapper-modal .actions,
+.dash-mapper-modal footer,
+.dash-mapper-modal .ant-modal-footer,
+.dash-mapper-modal .chakra-modal__footer,
+.dash-mapper-modal [class*="footer"],
+.dash-mapper-modal [class*="actions"],
+.dash-mapper-modal [class*="bar"],
+.dash-mapper-modal [class*="bottom"]{
+  background: var(--mapper-bg, var(--dash-panel, #E6F1FF)) !important;
+  background-image: none !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding-top: 12px !important;
+  display: flex !important;
+  gap: 8px !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+}
+
+/* ===== Mapper header/footer: non-sticky ===== */
+.dash-mapper-modal .modal-header,
+.dash-mapper-modal .ant-modal-header,
+.dash-mapper-modal .chakra-modal__header,
+.dash-mapper-modal header,
+.dash-mapper-modal [class*="header"],
+.dash-mapper-modal .mapper-actions,
+.dash-mapper-modal .footer,
+.dash-mapper-modal .modal-footer,
+.dash-mapper-modal .ant-modal-footer,
+.dash-mapper-modal .chakra-modal__footer,
+.dash-mapper-modal .actions,
+.dash-mapper-modal [class*="footer"],
+.dash-mapper-modal [class*="actions"],
+.dash-mapper-modal [class*="bar"],
+.dash-mapper-modal [class*="bottom"]{
+  position: static !important;
+  top: auto !important;
+  bottom: auto !important;
+  inset: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  background-attachment: scroll !important;
+}
+.dash-mapper-modal{
+  overflow: auto !important;
+  padding-bottom: 16px !important;
+  padding-top: 16px !important;
+}
+
+/* ===== Non-sticky kill switch for action bars (extra hard mode) ===== */
+.dash-mapper-modal .mapper-actions-fixed-killer{
+  position: static !important;
+  top: auto !important;
+  bottom: auto !important;
+  inset: auto !important;
+  z-index: auto !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  background: var(--mapper-bg, transparent) !important;
+  backdrop-filter: none !important;
+}
+
+/* ===== Main title variants ===== */
+.dash-mapper-modal .mapper-main-title{
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 0 6px 0 !important;
+  color: var(--dash-blue, #173b64) !important;
+  font-weight: 800 !important;
+  font-size: 22px !important;
+  line-height: 1.25 !important;
+  letter-spacing: .2px !important;
+}
+
+.dash-mapper-modal .mapper-title-plain{
+  background: transparent !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  padding: 0 !important;
+  margin: 0 0 8px 0 !important;
+  display: block !important;
+  color: var(--dash-blue, #173b64) !important;
+  font-weight: 800 !important;
+  font-size: 22px !important;
+  line-height: 1.25 !important;
+  letter-spacing: .2px !important;
+}
