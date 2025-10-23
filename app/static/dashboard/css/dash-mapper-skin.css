@@ -1,0 +1,169 @@
+/* DASHBOARD SKIN: Mapping Tool Aesthetic Match */
+:root {
+  /* fallbacks if tokens are missing */
+  --dash-blue: var(--brand-blue, #173b64);
+  --dash-panel: var(--dash-light, var(--dash-bg-light, #E6F1FF));
+  --dash-text: var(--text-900, #0b2942);
+  --dash-muted: var(--text-500, #6b7f93);
+  --dash-border: rgba(0, 0, 0, .10);
+  --dash-accent: var(--brand-orange, #b45309);
+  --dash-success: var(--brand-green, #176a4d);
+}
+
+/* Try to catch common mapping tool containers */
+.mapping-tool,
+#mappingTool,
+.map-tool,
+.column-mapper,
+.mapping-panel,
+[data-role="mapper"],
+[data-view="mapping"] {
+  background: var(--dash-panel);
+  color: var(--dash-text);
+  border: 1px solid var(--dash-border);
+  border-radius: 14px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .06);
+  padding: 16px 16px 12px;
+}
+
+.mapping-tool h2,
+#mappingTool h2,
+.map-tool h2,
+.column-mapper h2 {
+  color: var(--dash-blue);
+  font: 600 14px/1.2 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  letter-spacing: .2px;
+  margin: 0 0 10px 0;
+}
+
+.mapping-tool .subtle,
+.column-mapper .help,
+.map-tool .help,
+.mapping-panel .help,
+.mapping-tool p.hint {
+  color: var(--dash-muted);
+  font-size: 12px;
+  margin: 4px 0 10px;
+}
+
+/* Inputs & selects */
+.mapping-tool select,
+.mapping-tool input[type="text"],
+.column-mapper select,
+.column-mapper input[type="text"],
+.map-tool select,
+.map-tool input[type="text"] {
+  background: #fff;
+  color: var(--dash-text);
+  border: 1px solid var(--dash-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.mapping-tool select:focus,
+.mapping-tool input[type="text"]:focus,
+.column-mapper select:focus,
+.column-mapper input[type="text"]:focus {
+  border-color: color-mix(in oklab, var(--dash-blue) 50%, #ffffff 50%);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--dash-blue) 20%, transparent);
+}
+
+/* Buttons */
+.mapping-tool .btn,
+.column-mapper .btn,
+.map-tool .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  padding: 8px 14px;
+  border: 1px solid var(--dash-border);
+  background: #fff;
+  color: var(--dash-blue);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.mapping-tool .btn.primary,
+.column-mapper .btn.primary,
+.map-tool .btn.primary {
+  background: var(--dash-blue);
+  color: #fff;
+  border-color: transparent;
+}
+
+.mapping-tool .btn.ghost,
+.column-mapper .btn.ghost,
+.map-tool .btn.ghost {
+  background: transparent;
+  color: var(--dash-blue);
+}
+
+.mapping-tool .btn:hover,
+.column-mapper .btn:hover,
+.map-tool .btn:hover {
+  filter: brightness(0.97);
+}
+
+/* Table / grid of detected columns */
+.mapping-tool .grid,
+.column-mapper .grid,
+.map-tool .grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.mapping-tool .card,
+.column-mapper .card,
+.map-tool .card {
+  background: #fff;
+  border: 1px solid var(--dash-border);
+  border-radius: 12px;
+  padding: 10px;
+}
+
+.mapping-tool .card h3 {
+  font: 600 12px/1.2 system-ui;
+  color: var(--dash-blue);
+  margin: 0 0 6px;
+}
+
+.mapping-tool .badge,
+.column-mapper .badge,
+.map-tool .badge {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  border: 1px solid var(--dash-border);
+  background: #fff;
+  color: var(--dash-text);
+}
+
+.mapping-tool .badge.unmapped {
+  background: color-mix(in oklab, var(--dash-accent) 12%, #fff 88%);
+  color: var(--dash-accent);
+  border-color: color-mix(in oklab, var(--dash-accent) 30%, #fff 70%);
+}
+
+.mapping-tool .badge.mapped {
+  background: color-mix(in oklab, var(--dash-success) 12%, #fff 88%);
+  color: var(--dash-success);
+  border-color: color-mix(in oklab, var(--dash-success) 30%, #fff 70%);
+}
+
+/* Error/empty state */
+.mapping-tool .empty,
+.column-mapper .empty,
+.map-tool .empty {
+  background: color-mix(in oklab, var(--dash-blue) 6%, #fff 94%);
+  border: 1px dashed color-mix(in oklab, var(--dash-blue) 30%, #fff 70%);
+  border-radius: 12px;
+  padding: 14px;
+  color: var(--dash-muted);
+  font-size: 12px;
+}

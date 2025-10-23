@@ -1,0 +1,99 @@
+/* app\static\dashboard\css\missing-field-popup.css */
+/* v9: prominent popup for missing required mappings */
+#mtPopupOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+#mtPopup {
+  background: #111827;
+  color: #f9fafb;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
+  width: min(620px, 92vw);
+  box-shadow: 0 20px 70px rgba(0, 0, 0, 0.45);
+}
+
+#mtPopup header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#mtPopup header h3 {
+  margin: 0;
+  font-size: 18px;
+}
+
+#mtPopup .body {
+  padding: 16px 18px;
+}
+
+#mtPopup .body ul {
+  margin: 0.25rem 0 0.5rem 1rem;
+  padding: 0;
+}
+
+#mtPopup .body li {
+  margin: 0.25rem 0;
+  font-size: 14px;
+}
+
+#mtPopup footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 14px 18px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+#mtPopup .btn {
+  background: #1f2937;
+  color: #e5eef9;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 0.55rem 1rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#mtPopup .btn.primary {
+  background: #dc2626;
+  border-color: transparent;
+  color: #fff;
+}
+
+/* highlight missing selects */
+.mt-missing {
+  outline: 2px solid #dc2626 !important;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3);
+}
+
+@keyframes mt-shake {
+  10%, 90% {
+    transform: translateX(-1px);
+  }
+
+  20%, 80% {
+    transform: translateX(2px);
+  }
+
+  30%, 50%, 70% {
+    transform: translateX(-4px);
+  }
+
+  40%, 60% {
+    transform: translateX(4px);
+  }
+}
+
+.mt-shake {
+  animation: mt-shake 0.45s ease-in-out both;
+}

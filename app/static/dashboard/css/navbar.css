@@ -1,4 +1,13 @@
-/* --- MailTrace Navbar (light) --- */
+/* --- MailTrace Navbar --- */
+
+/* Global defaults */
+:root {
+  --nav-logo-size: 48px;
+  --nav-padding-y: 6px;
+  --nav-padding-x: 16px;
+  --nav-max-width: 1200px;
+}
+
 .mt-nav {
   position: sticky;
   top: 0;
@@ -7,19 +16,28 @@
   border-bottom: 1px solid #ececec;
 }
 
+/* Layout */
 .mt-nav .wrap {
-  max-width: 1200px;
+  padding: var(--nav-padding-y) var(--nav-padding-x);
+  max-width: var(--nav-max-width);
   margin: 0 auto;
-  padding: 10px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
 
-.mt-nav .left { display: flex; align-items: center; gap: 12px; }
+.mt-nav .left  { display: flex; align-items: center; gap: 16px; }
 .mt-nav .right { display: flex; align-items: center; gap: 18px; }
 
+.mt-nav .logo { display: flex; align-items: center; gap: 10px; }
+.mt-nav .logo img.mt-logo {
+  height: var(--nav-logo-size);
+  width: auto;
+  display: block; /* avoid line-height shrinking */
+}
+
+/* Links */
 .mt-nav a {
   text-decoration: none;
   color: #111;
@@ -28,11 +46,7 @@
 }
 .mt-nav a.active { color: #0a66ff; }
 
-.mt-nav .logo { display: flex; align-items: center; gap: 10px; }
-/* default logo size */
-.mt-nav .logo img { height: 56px; max-height: 56px; width: auto; }
-
-/* history popover */
+/* History popover */
 .mt-nav .hist { position: relative; }
 .mt-nav .hist-btn { cursor: pointer; }
 .mt-nav .hist-panel {
@@ -49,7 +63,3 @@
 }
 .mt-nav .hist-item:hover { background: #f6f7f9; }
 .mt-nav .hist-empty { padding: 10px; color: #777; font-size: 13px; }
-
-/* variant tweaks that were inline */
-.mt-nav .logo img { height: 64px; max-height: 64px; width: auto; }
-.mt-nav .wrap { padding: 6px 16px; }

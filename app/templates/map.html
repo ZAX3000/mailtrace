@@ -4,144 +4,291 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>MailTrace Map</title>
+  <title>Map • MailTrace</title>
 
-  <style>
-    html,
-    body,
-    #map {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-    }
+  <!-- Shared CSS like dashboard -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard/css/base.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard/css/navbar.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='dashboard/css/theme.css') }}">
 
-    .pill {
-      position: fixed;
-      top: 10px;
-      left: 10px;
-      background: #111;
-      color: #fff;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font: 14px/1.2 system-ui;
-    }
-  </style>
+  <!-- Leaflet + clustering CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 
-  {# Only include Mapbox assets when we intend to use them #}
-  {% if use_mapbox %}
+  {% if use_mapbox and mapbox_token %}
   <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.css" />
   <script src="https://api.mapbox.com/mapbox-gl-js/v2.16.1/mapbox-gl.js" defer></script>
   {% endif %}
 
-  <!-- Always include Leaflet (fallback or primary if no Mapbox token) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      margin: 0;
+    }
 
-  <!-- Prettier-friendly config handoff (no JS braces inside Jinja) -->
+    .toolbar {
+      padding: 10px;
+      border-bottom: 1px solid #e5e7eb;
+      display: flex;
+      gap: 14px;
+      align-items: center;
+    }
+
+    label {
+      font-weight: 600;
+    }
+
+    /* baseline height (JS will refine with exact toolbar/nav size) */
+    .mt-nav {
+      --nav-height: calc(var(--nav-logo-size) + var(--nav-padding-y) * 2);
+    }
+
+    #map {
+      height: calc(100vh - var(--nav-height) - 50px);
+    }
+  </style>
+
   <script id="map-config" type="application/json">
-      {{ {"use_mapbox": use_mapbox, "mapbox_token": mapbox_token}|tojson }}
-    </script>
+    {{ {"use_mapbox": use_mapbox, "mapbox_token": mapbox_token} | tojson }}
+  </script>
 </head>
 
 <body>
+  {# Shared navbar partial #}
+  {% set nav_mod = 'mt-nav--map' %}
+  {% include 'components/navbar.html' %}
+
+  <div class="toolbar" id="map-toolbar">
+    <label><input type="checkbox" class="k" value="match" checked> Matches</label>
+    <label><input type="checkbox" class="k" value="mail"> Mail addresses</label>
+    <label><input type="checkbox" class="k" value="crm"> CRM addresses</label>
+    <span style="margin-left:20px">
+      From <input type="date" id="from"> To <input type="date" id="to">
+    </span>
+    <button id="apply" type="button">Apply</button>
+    <span id="engine-pill" style="margin-left:auto; opacity:.7; font-size:12px"></span>
+  </div>
+
   <div id="map"></div>
-  <div class="pill" id="map-pill"></div>
+
+  <!-- Leaflet + clustering + spiderfier JS -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/overlapping-marker-spiderfier-leaflet@0.2.7/oms.min.js"></script>
 
   <script>
-    // tiny “wait until global exists” helper for deferred CDN scripts
+    // Wait for a global to exist (for deferred Mapbox GL)
     const waitFor = (testFn, timeout = 4000, step = 50) =>
       new Promise((resolve, reject) => {
         const t0 = performance.now();
         (function tick() {
           if (testFn()) return resolve();
-          if (performance.now() - t0 > timeout)
-            return reject(new Error("timeout"));
+          if (performance.now() - t0 > timeout) return reject(new Error('timeout'));
           setTimeout(tick, step);
         })();
       });
 
+    // Exact height: subtract current navbar + toolbar heights (handles wrapping)
+    function setMapHeight() {
+      const nav = document.querySelector('.mt-nav');
+      const tb = document.getElementById('map-toolbar');
+      const navH = nav ? nav.offsetHeight : 0;
+      const tbH = tb ? tb.offsetHeight : 0;
+      const el = document.getElementById('map');
+      el.style.height = `calc(100vh - ${navH + tbH}px)`;
+    }
+    window.addEventListener('resize', setMapHeight);
+    document.addEventListener('DOMContentLoaded', setMapHeight);
+
     (async () => {
-      // read config produced by Jinja with zero brace juggling
-      const cfgEl = document.getElementById("map-config");
-      const cfg = JSON.parse(cfgEl.textContent || "{}");
+      const cfg = JSON.parse(document.getElementById('map-config').textContent || '{}');
       const useMapbox = !!cfg.use_mapbox && !!cfg.mapbox_token;
-      const pill = document.getElementById("map-pill");
-      pill.textContent = useMapbox ? "Mapbox" : "Leaflet + OpenStreetMap";
+      document.getElementById('engine-pill').textContent = useMapbox ? 'Engine: Mapbox GL' : 'Engine: Leaflet';
 
-      // load feature data
-      const res = await fetch("{{ url_for('map.data') }}");
-      const fc =
-        (await res
-          .json()
-          .catch(() => ({ type: "FeatureCollection", features: [] }))) || {};
-      const features = Array.isArray(fc.features) ? fc.features : [];
+      // Build query from toolbar
+      function buildQuery() {
+        const kinds = Array.from(document.querySelectorAll('.k:checked')).map(x => x.value);
+        const params = new URLSearchParams();
+        kinds.forEach(k => params.append('kind', k));
+        const d0 = document.getElementById('from').value;
+        const d1 = document.getElementById('to').value;
+        if (d0) params.append('from', d0);
+        if (d1) params.append('to', d1);
+        return params.toString();
+      }
 
+      // Data loader: returns array of {lat, lon, kind, address, date}
+      async function loadPoints() {
+        const res = await fetch('{{ url_for("map.data") }}?' + buildQuery());
+        const json = await res.json().catch(() => null) || [];
+        if (Array.isArray(json)) return json;
+        if (json && json.type === 'FeatureCollection') {
+          return (json.features || []).map(f => {
+            const c = f?.geometry?.coordinates || [];
+            return {
+              lon: c[0], lat: c[1],
+              kind: f?.properties?.kind,
+              address: f?.properties?.address || f?.properties?.label,
+              date: f?.properties?.date
+            };
+          });
+        }
+        return [];
+      }
+
+      // ---- MAPBOX BRANCH (with clustering) ---------------------------------
       if (useMapbox) {
-        // Mapbox branch
         await waitFor(() => window.mapboxgl);
         mapboxgl.accessToken = cfg.mapbox_token;
 
         const map = new mapboxgl.Map({
-          container: "map",
-          style: "mapbox://styles/mapbox/streets-v11",
+          container: 'map',
+          style: 'mapbox://styles/mapbox/streets-v11',
           center: [-96.8, 37.8],
-          zoom: 3.5,
+          zoom: 3.5
         });
 
-        map.on("load", () => {
-          map.addSource("points", { type: "geojson", data: fc });
-          map.addLayer({
-            id: "pt",
-            type: "circle",
-            source: "points",
-            paint: {
-              "circle-radius": 4,
-              "circle-color": "#0ea5e9",
-              "circle-stroke-width": 1,
-              "circle-stroke-color": "#0b4a6f",
-            },
-          });
+        // ensure container height and notify Mapbox
+        setMapHeight();
+        map.resize();
+        window.addEventListener('resize', () => { setMapHeight(); map.resize(); });
 
-          if (features.length) {
-            const b = new mapboxgl.LngLatBounds();
-            for (const f of features) {
-              const c = f?.geometry?.coordinates;
-              if (Array.isArray(c)) b.extend(c);
-            }
-            if (!b.isEmpty()) map.fitBounds(b, { padding: 40, duration: 0 });
+        async function drawMapbox() {
+          const points = await loadPoints();
+          const fc = {
+            type: 'FeatureCollection',
+            features: points.filter(p => p.lat && p.lon).map(p => ({
+              type: 'Feature',
+              geometry: { type: 'Point', coordinates: [p.lon, p.lat] },
+              properties: p
+            }))
+          };
+
+          if (map.getSource('points')) {
+            map.getSource('points').setData(fc);
+          } else {
+            map.addSource('points', { type: 'geojson', data: fc, cluster: true, clusterRadius: 40, clusterMaxZoom: 12 });
+            map.addLayer({
+              id: 'clusters', type: 'circle', source: 'points', filter: ['has', 'point_count'],
+              paint: { 'circle-color': '#4f46e5', 'circle-radius': ['interpolate', ['linear'], ['get', 'point_count'], 1, 12, 100, 24], 'circle-opacity': 0.8 }
+            });
+            map.addLayer({
+              id: 'cluster-count', type: 'symbol', source: 'points', filter: ['has', 'point_count'],
+              layout: { 'text-field': ['get', 'point_count_abbreviated'], 'text-size': 12 }, paint: { 'text-color': '#fff' }
+            });
+            map.addLayer({
+              id: 'unclustered', type: 'circle', source: 'points', filter: ['!', ['has', 'point_count']],
+              paint: { 'circle-radius': 4, 'circle-color': '#0ea5e9', 'circle-stroke-width': 1, 'circle-stroke-color': '#0b4a6f' }
+            });
+
+            map.on('click', 'unclustered', (e) => {
+              const p = e.features[0].properties || {};
+              new mapboxgl.Popup().setLngLat(e.lngLat).setHTML(
+                `<b>${(p.kind || '').toUpperCase()}</b><br>${p.address || ''}<br>${p.date || ''}`
+              ).addTo(map);
+            });
+
+            map.on('click', 'clusters', (e) => {
+              const feats = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
+              const clusterId = feats[0].properties.cluster_id;
+              map.getSource('points').getClusterExpansionZoom(clusterId, (err, zoom) => {
+                if (err) return;
+                map.easeTo({ center: feats[0].geometry.coordinates, zoom });
+              });
+            });
+
+            map.on('mouseenter', 'clusters', () => map.getCanvas().style.cursor = 'pointer');
+            map.on('mouseleave', 'clusters', () => map.getCanvas().style.cursor = '');
           }
-        });
+
+          // Fit bounds then ensure final sizing is applied
+          const coords = points.filter(p => p.lat && p.lon).map(p => [p.lon, p.lat]);
+          if (coords.length) {
+            const b = new mapboxgl.LngLatBounds(coords[0], coords[0]);
+            coords.forEach(c => b.extend(c));
+            map.fitBounds(b, { padding: 40, duration: 0 });
+          }
+          map.resize();
+        }
+
+        document.getElementById('apply').addEventListener('click', drawMapbox);
+        map.on('load', drawMapbox);
         return;
       }
 
-      // Leaflet branch
-      await waitFor(() => window.L);
-      const map = L.map("map");
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "&copy; OpenStreetMap",
-      }).addTo(map);
+      // ---- LEAFLET BRANCH (MarkerCluster + Spiderfier) ----------------------
+      const map = L.map('map').setView([37.8, -96], 4);
+      L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; OpenStreetMap' }).addTo(map);
 
-      const pts = [];
-      for (const f of features) {
-        const coords = f?.geometry?.coordinates;
-        if (!Array.isArray(coords)) continue;
-        const [lon, lat] = coords;
-        pts.push([lat, lon]);
-        L.circleMarker([lat, lon], { radius: 5 })
-          .addTo(map)
-          .bindPopup(
-            `${f?.properties?.label || ""}<br>${f?.properties?.address || ""}`
+      // ensure container height and notify Leaflet
+      setMapHeight();
+      map.invalidateSize(true);
+      window.addEventListener('resize', () => { setMapHeight(); map.invalidateSize(false); });
+
+      let cluster = L.markerClusterGroup();
+      map.addLayer(cluster);
+
+      // GUARD OMS: only create/use OMS if the script actually loaded
+      let oms = null;
+      if (window.OverlappingMarkerSpiderfier) {
+        oms = new OverlappingMarkerSpiderfier(map);
+      }
+
+      async function drawLeaflet() {
+        const points = await loadPoints();
+        cluster.clearLayers();
+        const bounds = [];
+
+        points.forEach(p => {
+          if (!p.lat || !p.lon) return;
+          const m = L.marker([p.lat, p.lon]).bindPopup(
+            `<b>${(p.kind || '').toUpperCase()}</b><br>${p.address || ''}<br>${p.date || ''}`
           );
+          cluster.addLayer(m);
+          if (oms) oms.addMarker(m);
+          bounds.push([p.lat, p.lon]);
+        });
+
+        if (bounds.length) map.fitBounds(bounds, { padding: [40, 40] });
+        else map.setView([37.8, -96], 4);
+
+        // fill any new space after fit
+        map.invalidateSize(false);
       }
-      if (pts.length) {
-        map.fitBounds(L.latLngBounds(pts).pad(0.2));
-      } else {
-        map.setView([37.8, -96.8], 4);
-      }
-    })().catch((e) => {
-      console.error("map init error", e);
-    });
+
+      document.getElementById('apply').addEventListener('click', drawLeaflet);
+      drawLeaflet();
+    })();
+  </script>
+
+  <script>
+    // History dropdown wiring (shared navbar)
+    (function () {
+      const hist = document.getElementById('mt-hist');
+      if (!hist) return;
+      const btn = hist.querySelector('.hist-btn');
+      const list = document.getElementById('mt-hist-list');
+      const empty = document.getElementById('mt-hist-empty');
+
+      btn.addEventListener('click', () => hist.classList.toggle('open'));
+      document.addEventListener('click', (e) => { if (!hist.contains(e.target)) hist.classList.remove('open'); });
+
+      fetch('{{ url_for("dashboard.api_runs") if false else "/api/runs" }}')
+        .then(r => r.json()).then(data => {
+          const runs = (data && data.runs) || [];
+          empty.style.display = runs.length ? 'none' : 'block';
+          list.innerHTML = runs.map((r, i) => {
+            const dt = r.started_at ? new Date(r.started_at) : null;
+            const label = dt ? dt.toLocaleString() : ('Run ' + (i + 1));
+            return `<a class="hist-item" href="{{ url_for('dashboard.index') }}?run_id=${encodeURIComponent(r.run_id)}">
+                      <span>${label}</span>
+                      <span style="color:#999">${r.mail_count || 0} mail</span>
+                    </a>`;
+          }).join('');
+        })
+        .catch(() => { empty.textContent = 'No runs found'; });
+    })();
   </script>
 </body>
 

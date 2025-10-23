@@ -1,5 +1,4 @@
 // /static/dashboard/js/dashboard-runtime.js
-// MailTrace dashboard runtime (extracted from dashboard.html v19.4)
 (() => {
     'use strict';
 
@@ -14,7 +13,6 @@
     // Keep a predictable namespace available early
     window.MailTraceUI ||= { state: null, render: {} };
 
-    // ---------- Main script from dashboard.html ----------
     function showError(msg) { const b = document.getElementById('err'); const m = document.getElementById('errmsg'); b.style.display = 'block'; m.textContent = msg; }
     function parseCSV(text) {
       const rows = []; let i = 0, field = '', row = [], inQ = false;
@@ -539,69 +537,38 @@
           const host = document.getElementById('cmp-kpis');
           if (!host) return;
 
-          // Toggle button INSIDE the KPI grid, full-width row
           let toggle = document.getElementById('kpi-adv-toggle');
           if (!toggle) {
             toggle = document.createElement('button');
             toggle.id = 'kpi-adv-toggle';
             toggle.type = 'button';
             toggle.textContent = 'Show advanced KPIs';
-            toggle.style.marginTop = '8px';
-            toggle.style.background = 'transparent';
-            toggle.style.border = '1px solid #e2e2e2';
-            toggle.style.borderRadius = '8px';
-            toggle.style.padding = '6px 10px';
-            toggle.style.fontSize = '12px';
-            toggle.style.cursor = 'pointer';
-            toggle.style.display = 'block';
-            toggle.style.width = '100%';
-            toggle.style.gridColumn = '1 / -1';
             host.appendChild(toggle);
           }
 
-          // Advanced container INSIDE the KPI grid, hidden by default; spans all columns
           let adv = document.getElementById('cmp-kpis-advanced');
           if (!adv) {
             adv = document.createElement('div');
             adv.id = 'cmp-kpis-advanced';
             adv.className = 'kpis kpis-advanced';
-            adv.style.display = 'none';
-            adv.style.marginTop = '8px';
-            adv.style.borderTop = '1px dashed #e5e5e5';
-            adv.style.paddingTop = '8px';
-            adv.style.gridColumn = '1 / -1';
-            // Force 3-across layout; copy gaps from base if available
-            const cs = getComputedStyle(host);
-            adv.style.display = 'none';
-            adv.style.gap = cs.gap || (cs.columnGap || '12px');
-            adv.style.columnGap = cs.columnGap || cs.gap || '12px';
-            adv.style.rowGap = cs.rowGap || cs.gap || '12px';
-            adv.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
             host.appendChild(adv);
           }
 
           // Move advanced tiles into the advanced container
           const advKeys = ['rpm', 'avgticket', 'meddays', 'd30', 'd60', 'd90'];
           advKeys.forEach(k => {
-            const v = document.querySelector('[data-kpi=\"' + k + '\"]');
+            const v = document.querySelector('[data-kpi="' + k + '"]');
             if (v) {
               const tile = v.parentElement;
               if (tile && tile.parentElement !== adv) adv.appendChild(tile);
             }
           });
 
-          // Attach toggle behavior (idempotent)
           if (!toggle._bound) {
             toggle._bound = true;
             toggle.addEventListener('click', () => {
-              const cs = getComputedStyle(host);
-              const show = adv.style.display === 'none';
+              const show = adv.style.display === 'none' || !adv.style.display;
               adv.style.display = show ? 'grid' : 'none';
-              // keep 3-across and spacing consistent every toggle
-              adv.style.gridTemplateColumns = 'repeat(3, minmax(0, 1fr))';
-              adv.style.gap = cs.gap || (cs.columnGap || '12px');
-              adv.style.columnGap = cs.columnGap || cs.gap || '12px';
-              adv.style.rowGap = cs.rowGap || cs.gap || '12px';
               toggle.textContent = show ? 'Hide advanced KPIs' : 'Show advanced KPIs';
             });
           }
@@ -724,29 +691,89 @@
       zBody.innerHTML = state.topZips.map(r => { const denom = state.mailZipTotals.get(r.ZIP) || 0; const rate = denom ? (Math.round(100 * r.Count / denom) + "%") : "–"; return `<tr><td>${r.ZIP}</td><td style="text-align:center">${r.Count}</td><td style="text-align:center">${rate}</td></tr>`; }).join("");
     }
     function lineChart(canvas, labels, series, overlay) {
-      const ctx = canvas.getContext('2d'); const W = canvas.width, H = canvas.height, pad = 30; ctx.clearRect(0, 0, W, H);
+      // Hi-DPI: size backing store to devicePixelRatio but draw in CSS pixels
+      const cssW = canvas.clientWidth || canvas.width;
+      const cssH = canvas.clientHeight || canvas.height;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const needResize =
+        canvas.width !== Math.round(cssW * dpr) ||
+        canvas.height !== Math.round(cssH * dpr);
+
+      if (needResize) {
+        canvas.width  = Math.round(cssW * dpr);
+        canvas.height = Math.round(cssH * dpr);
+      }
+
+      const ctx = canvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // paint in CSS pixels
+
+      const W = cssW, H = cssH, pad = 30;
+      ctx.clearRect(0, 0, W, H);
+
       const all = [...series.flatMap(s => s.data), ...(overlay || []).flatMap(s => s.data)];
       const min = 0, max = Math.max(1, Math.max(...all));
       const xFor = i => pad + i * (W - 2 * pad) / Math.max(1, labels.length - 1);
       const yFor = v => H - pad - ((v - min) / (max - min)) * (H - 2 * pad);
-      ctx.strokeStyle = "#233049"; ctx.lineWidth = 1; ctx.beginPath(); for (let i = 0; i < labels.length; i++) { const x = xFor(i); ctx.moveTo(x, H - pad); ctx.lineTo(x, pad); } ctx.stroke();
-      ctx.strokeStyle = "#2f3b57"; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(pad, pad); ctx.lineTo(pad, H - pad); ctx.lineTo(W - pad, H - pad); ctx.stroke();
+
+      // grid + axes
+      ctx.strokeStyle = "#233049"; ctx.lineWidth = 1; ctx.beginPath();
+      for (let i = 0; i < labels.length; i++) { const x = xFor(i); ctx.moveTo(x, H - pad); ctx.lineTo(x, pad); }
+      ctx.stroke();
+      ctx.strokeStyle = "#2f3b57"; ctx.lineWidth = 1.5; ctx.beginPath();
+      ctx.moveTo(pad, pad); ctx.lineTo(pad, H - pad); ctx.lineTo(W - pad, H - pad); ctx.stroke();
+
       const colors = ["#60a5fa", "#34d399", "#f59e0b", "#f472b6", "#a78bfa"];
-      series.forEach((s, si) => { const col = colors[si % colors.length]; ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath(); s.data.forEach((v, i) => { const x = xFor(i), y = yFor(v); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.stroke(); });
+
+      const drawMarkers = (pts, r, col, alpha = 1) => {
+        ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = col;
+        for (const [x, y] of pts) { ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); }
+        ctx.restore();
+      };
+
+      // main series (solid lines + dots)
+      series.forEach((s, si) => {
+        const col = colors[si % colors.length];
+        ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.beginPath();
+        const pts = [];
+        s.data.forEach((v, i) => {
+          const x = xFor(i), y = yFor(v); pts.push([x, y]);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        drawMarkers(pts, 2.5, col, 1);
+      });
+
+      // YoY overlay (dashed + smaller dots)
       if (overlay && overlay.length) {
         overlay.forEach((s, si) => {
-          const col = colors[si % colors.length]; ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = col; ctx.globalAlpha = 0.6;
-          ctx.beginPath(); s.data.forEach((v, i) => { const x = xFor(i), y = yFor(v); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); }); ctx.stroke(); ctx.restore();
+          const col = colors[si % colors.length];
+          ctx.save(); ctx.setLineDash([5, 4]); ctx.strokeStyle = col; ctx.globalAlpha = 0.7; ctx.lineWidth = 2;
+          ctx.beginPath();
+          const pts = [];
+          s.data.forEach((v, i) => {
+            const x = xFor(i), y = yFor(v); pts.push([x, y]);
+            if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+          });
+          ctx.stroke(); ctx.restore();
+          drawMarkers(pts, 2, col, 0.7);
         });
       }
-      ctx.fillStyle = "#9fb2c8"; ctx.font = "11px system-ui"; const tickStep = Math.max(1, Math.ceil(labels.length / 12));
-      labels.forEach((lab, i) => { if (i % tickStep !== 0) return; const x = pad + i * (W - 2 * pad) / Math.max(1, labels.length - 1); ctx.fillText(lab, x - 14, H - pad + 14); });
+
+      // ticks
+      ctx.fillStyle = "#9fb2c8"; ctx.font = "11px system-ui";
+      const tickStep = Math.max(1, Math.ceil(labels.length / 12));
+      labels.forEach((lab, i) => {
+        if (i % tickStep !== 0) return;
+        const x = pad + i * (W - 2 * pad) / Math.max(1, labels.length - 1);
+        ctx.fillText(lab, x - 14, H - pad + 14);
+      });
     }
+    window.lineChart = lineChart;
     function renderGraph(state) {
       const canvas = document.getElementById("chart");
       const _yoy = document.getElementById("yoyToggle"); const overlayOn = !!(_yoy && _yoy.checked);
       const overlay = overlayOn ? [{ label: "Mail (YoY)", data: state.mSeriesY }, { label: "CRM (YoY)", data: state.cSeriesY }, { label: "Matches (YoY)", data: state.mtSeriesY }] : [];
-      lineChart(canvas, state.xLabs, [{ label: "Mail volume", data: state.mSeries }, { label: "CRM jobs", data: state.cSeries }, { label: "Matches", data: state.mtSeries }], overlay);
+      (window.lineChart || lineChart)(canvas, state.xLabs, [{ label: "Mail volume", data: state.mSeries }, { label: "CRM jobs", data: state.cSeries }, { label: "Matches", data: state.mtSeries }], overlay);
     }
 
     function setupSummarySticky() {
@@ -880,7 +907,6 @@
       if (yy < 100) yy += 2000;
       return Date.UTC(yy, Math.max(0, mm - 1), dd);
     }
-    // ---------- End main script from dashboard.html ----------
 
     // Optional: guard DOM listeners if elements are missing (keeps file idempotent across pages)
     const safeBind = (sel, type, fn) => {
