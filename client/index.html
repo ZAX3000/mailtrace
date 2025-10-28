@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0"
+    />
+
+    <title>MailTrace</title>
+    <meta name="description" content="MailTrace — upload, match, and visualize mail vs CRM." />
+    <meta name="robots" content="noindex" />
+
+    <!-- Favicons / brand -->
+    <link rel="icon" href="/favicon.ico" />
+    <!-- <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" /> -->
+
+    <!-- Legacy global CSS moved from Flask static -->
+    <!-- Keep only what you need; order matters if there are overrides -->
+    <link rel="stylesheet" href="/css/dashboard-ui.css" />
+    <link rel="stylesheet" href="/css/dashboard-charts.css" />
+    <link rel="stylesheet" href="/css/mapper-modal.css" />
+    <link rel="stylesheet" href="/css/missing-field-popup.css" />
+    <link rel="stylesheet" href="/css/mt-legend-navy.css" />
+    <link rel="stylesheet" href="/css/dash-mapper-skin.css" />
+    <link rel="stylesheet" href="/css/dash-mapper-modal-skin.css" />
+
+    <!-- If any of those CSS files reference images relatively (../img/...),
+         they’re now available at /img/...; update URLs if you see 404s -->
+  </head>
+
+  <body>
+    <noscript>JavaScript is required to run MailTrace.</noscript>
+
+    <!-- Vue mounts here -->
+    <div id="app"></div>
+
+    <!-- Vue entry (loads Tailwind via src/index.css if you added it there) -->
+    <script type="module" src="/src/main.ts"></script>
+
+    <!-- TEMP: legacy scripts (only if you absolutely need them before porting).
+         Avoid enabling ones that mutate elements Vue controls. -->
+    <!--
+    <script src="/legacy/js/advbtn-finder.js" defer></script>
+    <script src="/legacy/js/csv-validation-popup.js" defer></script>
+    <script src="/legacy/js/cta-3d-apply.js" defer></script>
+    <script src="/legacy/js/dash-mapper-modal.js" defer></script>
+    <script src="/legacy/js/dash-mapper.js" defer></script>
+    <script src="/legacy/js/dashboard-charts.js" defer></script>
+    -->
+  </body>
+</html>
