@@ -1,52 +1,103 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1.0"
-    />
+    <!-- Meta -->
+    <meta charset="utf-8" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
 
-    <title>MailTrace</title>
-    <meta name="description" content="MailTrace — upload, match, and visualize mail vs CRM." />
-    <meta name="robots" content="noindex" />
+    <title>MailTrace — Modular Dashboard (v19.4)</title>
 
-    <!-- Favicons / brand -->
-    <link rel="icon" href="/favicon.ico" />
-    <!-- <link rel="apple-touch-icon" href="/img/apple-touch-icon.png" /> -->
+    <!-- Favicon(s) -->
+    <link rel="icon" href="/img/favicon.ico" sizes="any" />
+    <!-- If you add an SVG later, you can also include:
+    <link rel="icon" type="image/svg+xml" href="/img/favicon.svg" />
+    -->
 
-    <!-- Legacy global CSS moved from Flask static -->
-    <!-- Keep only what you need; order matters if there are overrides -->
-    <link rel="stylesheet" href="/css/dashboard-ui.css" />
-    <link rel="stylesheet" href="/css/dashboard-charts.css" />
-    <link rel="stylesheet" href="/css/mapper-modal.css" />
-    <link rel="stylesheet" href="/css/missing-field-popup.css" />
-    <link rel="stylesheet" href="/css/mt-legend-navy.css" />
-    <link rel="stylesheet" href="/css/dash-mapper-skin.css" />
-    <link rel="stylesheet" href="/css/dash-mapper-modal-skin.css" />
+    <!-- CSS — paths updated to Vite public/ -->
+    <!-- Core CSS (base → components) -->
+    <link rel="stylesheet" href="/css/base.css?v=20251017">
+    <link rel="stylesheet" href="/css/legend.css?v=20251017">
+    <link rel="stylesheet" href="/css/mapper.css?v=20251017">
+    <link rel="stylesheet" href="/css/navbar.css?v=20251017">
+    <link rel="stylesheet" href="/css/dashboard-ui.css?v=1">
+    <link rel="stylesheet" href="/css/dashboard-charts.css?v=1">
 
-    <!-- If any of those CSS files reference images relatively (../img/...),
-         they’re now available at /img/...; update URLs if you see 404s -->
+    <!-- Theme – includes CTA + modal styles -->
+    <link rel="stylesheet" href="/css/theme.css?v=20251017">
+
+    <!-- Loader CSS (after theme so it can override if needed) -->
+    <link rel="stylesheet" href="/css/loader.css?v=20251017">
+
+    <!-- Page-specific overrides (keep last so they win) -->
+    <link rel="stylesheet" href="/css/page.css?v=20251017">
+
+    <!-- Missing field popup CSS -->
+    <link rel="stylesheet" href="/css/missing-field-popup.css">
+
+    <!-- Mapper modal CSS -->
+    <link rel="stylesheet" href="/css/mapper-modal.css">
+
+    <!-- Legend + skins -->
+    <link rel="stylesheet" href="/css/mt-legend-navy.css">
+    <link rel="stylesheet" href="/css/dash-mapper-skin.css?v=20251017">
+    <link rel="stylesheet" href="/css/dash-mapper-modal-skin.css?v=20251023">
+
+    <!-- Safe early guard so legacy code never sees MT_CONTEXT undefined.
+         Vue/Dashboard.vue will overwrite this with the real { run_id } later. -->
+    <script>
+      window.MT_CONTEXT = window.MT_CONTEXT || {};
+    </script>
+
+    <!-- Mount Vue app (module). Keep this BEFORE legacy scripts so the SPA initializes early. -->
+    <script type="module" src="/src/main.ts"></script>
+
+    <!-- Legacy JS (loaded from public/legacy/js). Keep defer so paint isn't blocked.
+         These should define helpers and NO-OP until Dashboard.vue calls window.initDashboard(runId). -->
+    <script src="/legacy/js/gate.js?v=20251017" defer></script>
+    <script src="/legacy/js/theme.js?v=20251017" defer></script>
+
+    <script src="/legacy/js/dashboard-runtime.js?v=20251017" defer></script>
+
+    <script src="/legacy/js/fuzzy-defaults.js?v=20251022" defer></script>
+    <script src="/legacy/js/mapper-modal.js?v=20251017" defer></script>
+
+    <script src="/legacy/js/missing-field-popup.js" defer></script>
+
+    <script src="/legacy/js/mtMapper_v12_improveDates.js" defer></script>
+    <script src="/legacy/js/mtMapper_v12_hookApply.js" defer></script>
+    <script src="/legacy/js/mtMapper_v10_enforce.js?v=20251017" defer></script>
+
+    <script src="/legacy/js/mt-legend-navy.js" defer></script>
+    <script src="/legacy/js/advbtn-finder.js" defer></script>
+    <script src="/legacy/js/cta-3d-apply.js" defer></script>
+    <script src="/legacy/js/csv-validation-popup.js" defer></script>
+
+    <script src="/legacy/js/kpi-graph-renderer.js" defer></script>
+    <script src="/legacy/js/kpi-graph-summary.js" defer></script>
+    <script src="/legacy/js/kpi-summary-renderer.js" defer></script>
+    <script src="/legacy/js/match-upload.js" defer></script>
+    <script src="/legacy/js/match-validation-popup.js" defer></script>
+
+    <script src="/legacy/js/linechart.js" defer></script>
+    <script src="/legacy/js/yoy-graph-renderer.js" defer></script>
+    <script src="/legacy/js/legend-and-mmyy-hook.js?v=20251022" defer></script>
+    <script src="/legacy/js/tooltip-enhancer.js" defer></script>
+
+    <script src="/legacy/js/dash-mapper-skin-apply.js?v=20251023" defer></script>
+    <script src="/legacy/js/dash-mapper-modal-apply.js?v=20251023" defer></script>
+    <script src="/legacy/js/dash-mapper-modal-vars.js?v=20251023" defer></script>
+    <script src="/legacy/js/dash-mapper-structure.js?v=1" defer></script>
+    <script src="/legacy/js/dash-mapper-actions-apply.js?v=1" defer></script>
+
+    <!-- Progress wiring (keep last like in the original template) -->
+    <script src="/legacy/js/progress_wiring.js?v=20251017" defer></script>
   </head>
 
   <body>
-    <noscript>JavaScript is required to run MailTrace.</noscript>
-
-    <!-- Vue mounts here -->
+    <!-- Vue SPA root -->
     <div id="app"></div>
-
-    <!-- Vue entry (loads Tailwind via src/index.css if you added it there) -->
-    <script type="module" src="/src/main.ts"></script>
-
-    <!-- TEMP: legacy scripts (only if you absolutely need them before porting).
-         Avoid enabling ones that mutate elements Vue controls. -->
-    <!--
-    <script src="/legacy/js/advbtn-finder.js" defer></script>
-    <script src="/legacy/js/csv-validation-popup.js" defer></script>
-    <script src="/legacy/js/cta-3d-apply.js" defer></script>
-    <script src="/legacy/js/dash-mapper-modal.js" defer></script>
-    <script src="/legacy/js/dash-mapper.js" defer></script>
-    <script src="/legacy/js/dashboard-charts.js" defer></script>
-    -->
   </body>
 </html>

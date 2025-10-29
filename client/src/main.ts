@@ -1,5 +1,9 @@
+// client/src/main.ts
 import { createApp } from 'vue'
-import './style.css'
 import App from './App.vue'
+import router from './router'
+import Loader from '@/components/loader.vue'
 
-createApp(App).mount('#app')
+const app = createApp(App)
+app.component('Loader', Loader)
+app.use(router).mount('#app')
