@@ -1,0 +1,37 @@
+/* src/styles/tokens.css */
+:root{
+  /* brand & surfaces (from theme.css) */
+  --blue:  #0d2c54;
+  --green: #4caf6d;
+  --bg:    #f3f7fb;
+  --ink:   #0b1d36;
+  --muted: #5a6a82;
+  --line:  #e6edf5;
+
+  /* CTA gradient ramp */
+  --green-hi: #6fd18a;
+  --green-de: #3c9e5d;
+  --green-lo: #2e8e51;
+
+  /* shadow color used in cards/modals */
+  --shadow-rgb: 13 44 84;
+
+  /* Summary column widths (from base.css) */
+  --col-mail-addr: 240px;
+  --col-mail-unit: 84px;
+  --col-crm-addr:  240px;
+  --col-crm-unit:  84px;
+  --col-city:      160px;
+  --col-state:     72px;
+  --col-zip:       108px;
+  --col-maildates: 260px;
+  --col-crmdate:   130px;
+  --col-amount:    120px;
+  --col-conf:      110px;
+  --col-notes:     300px;
+
+  /* Confidence colors (from base.css) */
+  --conf-green: #16a34a;
+  --conf-yellow:#d97706;
+  --conf-red:   #dc2626;
+}

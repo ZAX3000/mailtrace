@@ -2,7 +2,8 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import router from './router'
-import Loader from '@/components/loader.vue'
+
+import Loader from '@/components/Loader.vue'
 
 const app = createApp(App)
 app.component('Loader', Loader)

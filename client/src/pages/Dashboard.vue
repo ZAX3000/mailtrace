@@ -1,7 +1,9 @@
 <!-- client/src/pages/Dashboard.vue -->
 <script setup lang="ts">
-import { onMounted, nextTick } from 'vue'
+import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
+import { useUploadGuard } from '@/composables/useUploadGuard'
 
 declare global {
   interface Window {
@@ -12,30 +14,21 @@ declare global {
 
 const route = useRoute()
 const router = useRouter()
+const showUploadGuard = ref(false)
+
+// create the guard; pass a function that opens our modal
+useUploadGuard(() => (showUploadGuard.value = true))
 
 onMounted(async () => {
-  // read run_id from query
   const runId = (route.query.run_id as string) || ''
-
-  // (optional) normalize URL to ensure run_id is present/consistent without reload
   if (runId && route.query.run_id !== runId) {
     router.replace({ path: route.path, query: { ...route.query, run_id: runId } })
   }
-
-  // expose context for any remaining legacy bits
   window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: runId }
-
-  // wait for Vue to paint DOM the legacy expects
   await nextTick()
-
-  // kick legacy boot function (defined by your legacy bundle)
   window.initDashboard?.(runId)
 })
 
-// Example helpers (use when you actually need the loader)
-// function startLongTask() { show({ progress: 0, etaSeconds: 90 }) }
-// function updateTask(p: number, eta?: number | null) { setProgress(p); setETA(eta ?? null) }
-// function endLongTask() { hide() }
 </script>
 
 <template>
@@ -165,20 +158,11 @@ onMounted(async () => {
   </div>
 
   <!-- Simple alert modal (IDs kept for legacy) -->
-  <div aria-labelledby="mt-modal-title" aria-modal="true" id="mt-modal-backdrop" role="dialog" style="display:none">
-    <div aria-describedby="mt-modal-desc" id="mt-modal" role="document" tabindex="-1">
-      <header>
-        <span aria-hidden="true" class="dot"></span>
-        <h3 id="mt-modal-title">Action needed</h3>
-      </header>
-      <div class="content">
-        <p id="mt-modal-desc">Please pick <strong>both CSV files</strong> first.</p>
-        <p class="hint">Tip: select your <em>Mail CSV</em> and your <em>CRM CSV</em>, then click <strong>Run matching</strong>.</p>
-      </div>
-      <footer>
-        <button class="btn btn-outline" id="mt-modal-cancel" type="button">Cancel</button>
-        <button class="btn btn-primary" id="mt-modal-ok" type="button">Okay</button>
-      </footer>
-    </div>
-  </div>
+  <ModalUploadGuard
+    v-model="showUploadGuard"
+    title="Action needed"
+    message="Please pick <strong>both CSV files</strong> first."
+    focusSelector="#mailCsv"
+    :triggerFileDialog="true"
+  />
 </template>

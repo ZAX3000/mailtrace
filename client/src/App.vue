@@ -1,12 +1,23 @@
 <!-- client/src/App.vue -->
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { RouterView } from 'vue-router'
+import Loader from '@/components/Loader.vue'
+import Navbar from '@/components/Navbar.vue'
+
+import '@/styles/tokens.css'
+import '@/styles/theme-light.css'
+import '@/styles/base.css'
+import '@/styles/components.css'
+import '@/styles/navbar.css'
+
+</script>
 
 <template>
-  <Loader />      <!-- always present -->
+  <Loader />
+  <Navbar />
   <RouterView />
 </template>
 
 <style>
-/* Optional: ensure the app fills the viewport (helps legacy CSS behave) */
-html, body, #app { height: 100%; }
+  html, body, #app { height: 100%; }
 </style>
