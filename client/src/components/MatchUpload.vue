@@ -3,7 +3,7 @@
   <section class="section p-4 space-y-4">
     <!-- Header -->
     <header class="flex items-center justify-between">
-      <h2 class="font-semibold">Upload & Match</h2>
+      <h2 class="font-semibold text-sm">Upload &amp; Match</h2>
     </header>
 
     <!-- Inputs -->

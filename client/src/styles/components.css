@@ -1,42 +1,57 @@
-/* src/styles/components.css */
+/* ==========================================================================
+   COMPONENTS.CSS
+   ========================================================================== */
 
-/* Neutralize dark containers and shared shells */
+/* Shell neutralization (keep wrappers harmless) */
 main, .container, .content, .dashboard, #app, .app, .page, .wrapper {
   background: transparent;
   box-shadow: none;
 }
 
-/* Card/section look */
+/* Cards / panels */
 .section, .panel, .card, .table-wrap, .box, .cardlike {
   background: var(--surface-color);
   border: 1px solid var(--line-color);
   border-radius: 12px;
   box-shadow: var(--elev-1);
 }
+:where(.card, .panel, .box, .cardlike){ padding: 14px 16px; }
+.card > * + *, .panel > * + *, .box > * + *, .cardlike > * + * { margin-top: 10px; }
 
-/* Form + inputs + basic buttons */
+/* Forms & basic buttons (plain) */
 button, .btn, input[type="submit"] {
+  appearance: none;
   background: var(--accent-color);
-  color: #fff;
+  color: var(--on-accent-color, #fff);
   border: 0;
   border-radius: 8px;
   font-weight: 700;
   padding: .55rem 1rem;
   cursor: pointer;
+  transition: filter .15s ease, transform .05s ease, box-shadow .15s ease;
 }
-input[type="text"], input[type="email"], input[type="number"], input[type="file"],
-select, textarea {
-  background:#fff;
+button:hover, .btn:hover, input[type="submit"]:hover { filter: brightness(1.02); }
+button:active, .btn:active, input[type="submit"]:active { transform: translateY(1px); }
+button:disabled, .btn:disabled, input[type="submit"]:disabled { opacity: .65; cursor: not-allowed; }
+
+input[type="text"], input[type="email"], input[type="number"], input[type="file"], select, textarea {
+  background: #fff;
   color: var(--brand-color);
-  border:1px solid var(--line-color);
-  border-radius:6px;
-  padding:.5rem .6rem;
+  border: 1px solid var(--line-color);
+  border-radius: 6px;
+  padding: .5rem .6rem;
 }
 
-/* CTA 3D gradient button family */
-.btn.primary, button.btn-primary, .btn.green,
-button[data-variant="primary"], a[data-variant="primary"],
-.mt-cta-3d, .btn-demo, .formgrid button, .mt-btn-advanced {
+/* CTA 3D gradient */
+.mt-cta-3d,
+.btn.primary,
+button.btn-primary,
+.btn.green,
+button[data-variant="primary"],
+a[data-variant="primary"],
+.btn-demo,
+.formgrid button.mt-cta-3d,
+.mt-btn-advanced {
   position: relative;
   color: #fff;
   border: 1px solid var(--green-de);
@@ -50,8 +65,8 @@ button[data-variant="primary"], a[data-variant="primary"],
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.35),
     inset 0 -1px 0 rgba(0,0,0,.08),
-    0 6px 14px rgba(var(--shadow-rgb) / .10),
-    0 2px 6px rgba(var(--shadow-rgb) / .10);
+    0 6px 14px rgba(var(--shadow-rgb), .10),
+    0 2px 6px rgba(var(--shadow-rgb), .10);
   transition: transform .05s ease, filter .15s ease, box-shadow .15s ease;
 }
 .mt-cta-3d:hover,
@@ -63,8 +78,8 @@ a[data-variant="primary"]:hover {
   box-shadow:
     inset 0 1px 0 rgba(255,255,255,.38),
     inset 0 -1px 0 rgba(0,0,0,.10),
-    0 10px 18px rgba(var(--shadow-rgb) / .12),
-    0 3px 8px rgba(var(--shadow-rgb) / .12);
+    0 10px 18px rgba(var(--shadow-rgb), .12),
+    0 3px 8px rgba(var(--shadow-rgb), .12);
 }
 .mt-cta-3d:active,
 .btn.primary:active,
@@ -73,37 +88,61 @@ button.btn-primary:active { transform: translateY(1px); }
 .btn.primary:disabled,
 button.btn-primary:disabled { opacity:.65; cursor:not-allowed; }
 
-/* Secondary/outline CTA */
-.mt-cta-secondary {
-  position: relative;
-  background: #fff;
-  color: var(--brand-color);
-  border: 1px solid var(--line-color);
-  border-radius: 10px;
-  font-weight: 700;
-  box-shadow: 0 2px 6px rgba(var(--shadow-rgb) / .06), inset 0 1px 0 rgba(255,255,255,.6);
-  transition: transform .05s, filter .15s, box-shadow .15s, border-color .15s;
-}
-.mt-cta-secondary:hover {
-  border-color: var(--accent-color);
-  box-shadow: 0 4px 10px rgba(var(--shadow-rgb) / .08), inset 0 1px 0 rgba(255,255,255,.7);
-}
 .mt-cta-secondary:active { transform: translateY(1px); }
 
-/* KPI container background (keeps previous light look) */
-#cmp-kpis { background: var(--surface-color); }
-
-/* === Modal / Upload guard === */
-#mt-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(var(--shadow-rgb) / 0.35);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
+/* KPI blocks */
+.kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.kpi {
+  background: var(--surface-color);
+  border: 1px solid var(--line-color);
+  border-radius: 12px;
+  box-shadow: var(--elev-1);
+  padding: 12px;
+  display: grid; grid-template-rows: auto 1fr; gap: 4px; min-height: 84px;
 }
-#mt-modal {
+.kpi .v { font-weight: 600; font-size: 20px; line-height: 1.2; color: var(--ink-color); }
+.kpi .l { font-size: 12px; line-height: 1.2; color: var(--muted-color); }
+.kpi-adv-toggle {
+  margin-top: 8px; background: transparent; border: 1px solid var(--line-color);
+  border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer; color: var(--ink-color);
+}
+.kpi-adv {
+  display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--line-color);
+  display: grid; gap: 12px; grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.kpi-adv.is-open { display: grid; }
+
+/* Back-compat: old #cmp-kpis just becomes a neutral surface */
+#cmp-kpis { background: var(--surface-color); } /* safe to delete after template rename */
+
+/* Legend */
+.mt-legend {
+  margin-top: 6px; display: flex; align-items: center; flex-wrap: wrap; gap: 14px;
+  font-size: 12px; line-height: 1.2; color: var(--muted-color);
+}
+.mt-legend .item { display: inline-flex; align-items: center; gap: 6px; }
+.mt-legend .swatch { width: 14px; height: 3px; border-radius: 2px;
+  background: color-mix(in srgb, var(--line-color) 60%, #fff 40%); }
+.mt-legend.--navy { color: color-mix(in srgb, var(--muted-color) 70%, #94a3b8 30%); }
+
+/* Chart container */
+.mt-chart { width: 100%; height: 220px; display: block; }
+.mt-chart.--tall { height: 320px; }
+
+/* Loader bits (for your MailTrace modal) */
+#mailtrace-modal .mt-bar      { background: color-mix(in srgb, var(--accent-color) 14%, transparent); }
+#mailtrace-modal .mt-bar-fill { background: var(--accent-color); }
+#mailtrace-modal .mt-label,
+#mailtrace-modal .mt-eta      { color: var(--brand-color); }
+
+/* Modal / overlay (class-based) */
+.mt-modal__backdrop {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(var(--shadow-rgb), 0.35); z-index: var(--z-modal, 10000);
+}
+.mt-modal__backdrop.is-open { display: flex; }
+
+.mt-modal {
   width: min(520px, 92vw);
   background: var(--surface-color);
   color: var(--brand-color);
@@ -112,78 +151,86 @@ button.btn-primary:disabled { opacity:.65; cursor:not-allowed; }
   box-shadow: var(--elev-2);
   transform: translateY(8px) scale(.98);
   opacity: 0;
-  transition: transform .15s ease, opacity .15s ease;
+  transition: transform .15s var(--ease, ease), opacity .15s var(--ease, ease);
   overflow: hidden; /* fixes header corner nubs */
 }
-#mt-modal.open { transform: translateY(0) scale(1); opacity: 1; }
-#mt-modal header {
-  display: flex;
-  align-items: center;
-  gap: .6rem;
-  padding: 14px 16px 8px;
-  border-bottom: 1px solid var(--line-color);
+.mt-modal.is-open { transform: translateY(0) scale(1); opacity: 1; }
+
+.mt-modal header {
+  display: flex; align-items: center; gap: .6rem;
+  padding: 14px 16px 8px; border-bottom: 1px solid var(--line-color);
 }
-#mt-modal header .dot {
+.mt-modal header .dot {
   width: 12px; height: 12px; border-radius: 999px;
   background: linear-gradient(180deg, var(--green-hi) 0%, var(--accent-color) 55%, var(--green-de) 100%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 2px rgba(76,175,109,.15);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
-#mt-modal header h3 { margin: 0; font-size: 1.05rem; color: var(--brand-color); }
-#mt-modal .content { padding: 14px 16px; font-size: .98rem; line-height: 1.45; }
-#mt-modal .content p { margin: .35rem 0; }
-#mt-modal footer {
-  display: flex;
-  gap: .5rem;
-  justify-content: flex-end;
-  padding: 12px 16px 16px;
-  border-top: 1px solid var(--line-color);
+.mt-modal header h3 { margin: 0; font-size: 1.05rem; color: var(--brand-color); }
+
+.mt-modal .content { padding: 14px 16px; font-size: .98rem; line-height: 1.45; }
+.mt-modal .content p { margin: .35rem 0; }
+
+.mt-modal footer {
+  display: flex; gap: .5rem; justify-content: flex-end;
+  padding: 12px 16px 16px; border-top: 1px solid var(--line-color);
 }
-#mt-modal .btn {
-  appearance: none;
-  border-radius: 10px;
-  border: 1px solid var(--line-color);
-  padding: .55rem 1rem;
-  font-weight: 700;
-  cursor: pointer;
+.mt-modal .btn {
+  appearance: none; border-radius: 10px; border: 1px solid var(--line-color);
+  padding: .55rem 1rem; font-weight: 700; cursor: pointer;
 }
-#mt-modal .btn-primary {
-  color: #fff;
-  border-color: var(--green-de);
+.mt-modal .btn-primary {
+  color: #fff; border-color: var(--green-de);
   background: linear-gradient(180deg, var(--green-hi) 0%, var(--accent-color) 45%, var(--green-de) 100%);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 14px rgba(var(--shadow-rgb) / .10);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), 0 6px 14px rgba(var(--shadow-rgb), .10);
 }
-#mt-modal .btn-outline { color: var(--brand-color); background:#fff; }
-#mt-modal .hint { margin-top: .4rem; font-size: .9rem; color: var(--muted-color); }
-#mt-modal-backdrop.show { display: flex; }
+.mt-modal .btn-outline { color: var(--brand-color); background: #fff; }
+.mt-modal .hint { margin-top: .4rem; font-size: .9rem; color: var(--muted-color); }
 
-/* Loader colors (if CSS-driven) */
-#mailtrace-modal .mt-bar { background: color-mix(in srgb, var(--accent-color) 14%, transparent); }
-#mailtrace-modal .mt-bar-fill { background: var(--accent-color); }
-#mailtrace-modal .mt-label, #mailtrace-modal .mt-eta { color: var(--brand-color); }
+/* Back-compat bridge (supports old IDs/ARIA without overrides) */
+#mt-modal-backdrop { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(var(--shadow-rgb), 0.35); z-index: var(--z-modal, 10000); }
+#mt-modal-backdrop.show,
+#mt-modal-backdrop[aria-hidden="false"] { display: flex; }
+#mt-modal { width: min(520px, 92vw); background: var(--surface-color); color: var(--brand-color);
+  border: 1px solid var(--line-color); border-radius: 14px; box-shadow: var(--elev-2);
+  transform: translateY(8px) scale(.98); opacity: 0; transition: transform .15s ease, opacity .15s ease; overflow: hidden; }
+#mt-modal.open { transform: translateY(0) scale(1); opacity: 1; }
 
-/* inner spacing for card-like containers */
-:where(.card, .panel, .box, .cardlike){
-  padding: 14px 16px;
+/* Mapper & Popup overlays (migrate to classes; keep attr bridge) */
+.mt-mapper__overlay,
+.mt-popup__overlay {
+  position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+  background: rgba(5,12,20,.55); z-index: var(--z-modal, 10000); padding: 20px;
 }
+.mt-mapper__overlay.is-open,
+.mt-popup__overlay.is-open { display: flex; }
 
-/* optional: vertical rhythm for stacked children inside cards */
-.card > * + *,
-.panel > * + *,
-.box > * + *,
-.cardlike > * + * {
-  margin-top: 10px;
-}
-
-/* Overlays are OFF by default */
+/* Legacy attribute toggles (safe to delete after template update) */
 #mtMapperOverlay[aria-hidden="true"],
 #mtPopupOverlay[aria-hidden="true"] {
-  display: none !important;
-  pointer-events: none !important;
+  display: none; pointer-events: none;
 }
-
-/* When you want them visible, flip aria-hidden and they activate */
 #mtMapperOverlay[aria-hidden="false"],
 #mtPopupOverlay[aria-hidden="false"] {
-  display: flex;           /* or block, depending on your layout */
-  pointer-events: auto;
+  display: flex; pointer-events: auto;
+}
+
+/* Tables (component-level) */
+.mt-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+.mt-table th, .mt-table td {
+  text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line-color); vertical-align: top;
+}
+.mt-table th { font-size: 12px; color: var(--muted-color); font-weight: 600; }
+.mt-table tr:last-child td { border-bottom: 0; }
+
+/* Legend + twins helpers already above; add twins layout for symmetry */
+.mt-twins { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: stretch; }
+@media (max-width: 980px) { .mt-twins { grid-template-columns: 1fr; } }
+.mt-twins > * { min-height: 100%; display: grid; align-content: start; }
+
+/* Show/hide helpers */
+.is-hidden { display: none !important; }
+.is-visually-hidden {
+  position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
