@@ -135,11 +135,13 @@ def _on_load(state) -> None:
 
 
 def _ensure_dev_user() -> User:
-    """Create or get a durable local dev user with a real UUID."""
+    """Create or get a durable local dev user with a stable UUID."""
+    from flask import current_app
     email = "dev@local.test"
+    dev_id = current_app.config.get("DEV_USER_ID")
     user = db.session.query(User).filter_by(email=email).first()
     if not user:
-        user = User(id=uuid.uuid4(), email=email, full_name="Dev User", provider="dev")
+        user = User(id=dev_id, email=email, full_name="Dev User", provider="dev")
         db.session.add(user)
         db.session.commit()
     return user

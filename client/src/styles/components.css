@@ -173,3 +173,17 @@ button.btn-primary:disabled { opacity:.65; cursor:not-allowed; }
 .cardlike > * + * {
   margin-top: 10px;
 }
+
+/* Overlays are OFF by default */
+#mtMapperOverlay[aria-hidden="true"],
+#mtPopupOverlay[aria-hidden="true"] {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+/* When you want them visible, flip aria-hidden and they activate */
+#mtMapperOverlay[aria-hidden="false"],
+#mtPopupOverlay[aria-hidden="false"] {
+  display: flex;           /* or block, depending on your layout */
+  pointer-events: auto;
+}

@@ -1,21 +1,25 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useLoader } from '@/stores/loader'
 
-const { state, hide } = useLoader()
+const loader = useLoader()
+const { open, progress, etaSeconds } = storeToRefs(loader)
+const { hide } = loader
 
-const pct = computed(() => `${Math.round(state.progress)}%`)
+const pct = computed(() => `${Math.round(progress.value)}%`)
 const eta = computed(() => {
-  if (state.etaSeconds == null) return '≈ --:-- left'
-  const m = Math.floor(state.etaSeconds / 60)
-  const s = state.etaSeconds % 60
+  const sec = etaSeconds.value
+  if (sec == null) return '≈ --:-- left'
+  const m = Math.floor(sec / 60)
+  const s = sec % 60
   return m > 0 ? `≈ ${m}m ${s}s left` : `≈ ${s}s left`
 })
 </script>
 
 <template>
   <div
-    v-show="state.open"
+    v-show="open"
     class="fixed inset-0 z-[2147483646] m-0 flex items-center justify-center"
     style="background: rgba(0,0,0,.30)"
     aria-modal="true"

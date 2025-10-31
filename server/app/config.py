@@ -1,6 +1,9 @@
 import os
 class Config:
+    # Delete this line after auth0 implementation
     DISABLE_AUTH = os.environ.get('DISABLE_AUTH', '0') in ('1','true','True')
+    DEV_USER_ID = os.getenv("DEV_USER_ID") or "00000000-0000-0000-0000-000000000001"
+
     SECRET_KEY = os.environ.get("SECRET_KEY", "dev")
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "sqlite:///local.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False

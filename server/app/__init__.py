@@ -2,63 +2,64 @@
 from __future__ import annotations
 
 import os
-import click
-from flask import Flask, redirect, url_for, send_from_directory
+from flask import Flask, redirect, url_for, send_from_directory, session, request
+from dotenv import load_dotenv
 
 from .config import Config
 from .extensions import db, migrate
+from .typing_ext import MailTraceFlask
+from .errors import register_error_handlers
 
-# Blueprints
-from .blueprints.dashboard_routes import dashboard_bp
-from .blueprints.api import api_bp
-from .blueprints.runs import runs_bp
-from .blueprints.auth import auth_bp
-from .blueprints.billing import billing_bp
-from .blueprints.map import map_bp
-from .blueprints.health import health_bp
-
-from .services.storage import LocalStorage
-from .services.map_cache import build_map_cache            # <- import directly; no try/except
-from .typing_ext import MailTraceFlask                     # <- typed Flask subclass
-from dotenv import load_dotenv
-
-load_dotenv()  # pip install python-dotenv, once per venv
-
-def register_cli(app: Flask) -> None:
-    @app.cli.command("build-map-cache")
-    @click.option("--limit", default=1000, show_default=True, help="Max points to include")
-    def build_map_cache_cmd(limit: int):
-        """Build the cached GeoJSON used by /map/data."""
-        with app.app_context():
-            path = build_map_cache(limit=limit)            # <- now matches signature
-            click.echo(f"Wrote {path}")
+load_dotenv()
 
 def create_app() -> Flask:
-    app = MailTraceFlask(                                  # <- use typed subclass
+    app = MailTraceFlask(
         __name__,
         static_folder=os.path.join(os.path.dirname(__file__), "static"),
         template_folder=os.path.join(os.path.dirname(__file__), "templates"),
         instance_relative_config=True,
     )
     app.config.from_object(Config)
-
     os.makedirs(app.instance_path, exist_ok=True)
 
+    # Extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    register_error_handlers(app)
 
+    # --- Dev autologin (remove once real Auth0 is live) ---
+    if app.config.get("DISABLE_AUTH"):
+        @app.before_request
+        def _dev_autologin():
+            if "user_id" in session:
+                return
+            # Only trust localhost
+            if request.remote_addr in {"127.0.0.1", "::1"}:
+                from app.blueprints.auth import _ensure_dev_user
+                u = _ensure_dev_user()
+                session["user_id"] = str(u.id)
+                session["email"] = u.email
+    # -------------------------------------------------------
+
+    # Lazy import to avoid heavy imports at module load time
+    from .services.storage import LocalStorage
     uploads_root = os.path.join(app.instance_path, "uploads")
-    app.storage = LocalStorage(uploads_root)               # <- mypy now happy
+    app.storage = LocalStorage(uploads_root)
+
+    # Register blueprints (import inside the factory)
+    from .blueprints.dashboard_routes import dashboard_bp
+    from .blueprints.api import api_bp
+    from .blueprints.auth import auth_bp
+    from .blueprints.billing import billing_bp
+    from .blueprints.map import map_bp
+    from .blueprints.health import health_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
-    app.register_blueprint(runs_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(map_bp)
     app.register_blueprint(health_bp)
-
-    register_cli(app)
 
     @app.route("/")
     def index():

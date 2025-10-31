@@ -4,6 +4,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
 import { useUploadGuard } from '@/composables/useUploadGuard'
+import MatchUpload from '@/components/MatchUpload.vue'
 
 declare global {
   interface Window {
@@ -38,13 +39,7 @@ onMounted(async () => {
 
     <div class="row">
       <!-- Upload panel -->
-      <div class="card" style="flex:1 1 380px; min-width:340px">
-        <label class="small">Mail CSV</label>
-        <input accept=".csv" id="mailCsv" type="file" />
-        <label class="small">CRM CSV</label>
-        <input accept=".csv" id="crmCsv" type="file" />
-        <button id="runBtn">Run matching</button>
-      </div>
+      <MatchUpload class="card" style="flex:1 1 380px; min-width:340px" />
 
       <!-- KPI bar -->
       <div

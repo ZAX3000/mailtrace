@@ -115,7 +115,7 @@ The repo includes `docker-compose.yml` with a `db` service.
 * Credentials: `mailtrace` / `devpass`
 * DB name: `mailtrace`
 
-Start it:
+Start it (make sure the Docker app is running first!):
 
 ```bash
 docker compose up -d db
