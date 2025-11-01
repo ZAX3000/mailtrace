@@ -20,12 +20,12 @@ CANON_COLS = [
     "address2",
     "city",
     "state",
-    "postal_code",
+    "zip",
     "sent_date",
 ]
 
 # Required AFTER aliasing (by column name presence in header mapping, not per-row values)
-REQUIRED: set[str] = {"address1", "city", "state", "postal_code", "sent_date"}
+REQUIRED: set[str] = {"address1", "city", "state", "zip", "sent_date"}
 
 ALIASES: Dict[str, List[str]] = {
     "id": ["id", "mail_id", "record_id"],  # maps to source_id
@@ -33,7 +33,7 @@ ALIASES: Dict[str, List[str]] = {
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
     "state": ["state", "st"],
-    "postal_code": ["postal_code", "zip", "zipcode", "zip_code", "zip code"],
+    "zip": ["postal_code", "zip", "zipcode", "zip_code", "zip code"],
     "sent_date": ["sent_date", "sent date", "mail_date", "mail date", "date", "sent", "mailed", "mailed_at",
         "mailed at", "date mailed", "mailed date", "mailed_on", "mailed on", "postmark", "postmarked",
         "postmark date", "mailing date", "outbound date"],
@@ -87,7 +87,7 @@ def ensure_staging_mail(engine: Engine) -> None:
                     address2     TEXT NULL,
                     city         TEXT NOT NULL,
                     state        TEXT NOT NULL,
-                    postal_code  TEXT NOT NULL,
+                    zip  TEXT NOT NULL,
                     sent_date    DATE NOT NULL
                 )
                 """
@@ -338,7 +338,7 @@ def copy_mail_csv_path(
                     "address2": (get_val(row, "address2") or None),
                     "city": get_val(row, "city"),
                     "state": get_val(row, "state"),
-                    "postal_code": get_val(row, "postal_code"),
+                    "zip": get_val(row, "postal_code"),
                     "sent_date": sent_date_iso,
                 }
             )

@@ -1,14 +1,12 @@
 # app/blueprints/auth.py
 from __future__ import annotations
 
-import uuid
-import importlib
 from functools import wraps
-from typing import Any, Optional, Protocol
+from typing import Any, Optional, Protocol, Callable, TypeVar, cast
+import importlib
 
 from flask import (
     Blueprint,
-    Flask,
     current_app,
     jsonify,
     redirect,
@@ -17,11 +15,14 @@ from flask import (
     url_for,
 )
 
-from ..extensions import db
-from ..models import User
+from app.extensions import db
+from app.models import User
 
+auth_bp = Blueprint("auth", __name__, url_prefix="/auth")
 
-# ---------- Typed interface (what the rest of the app relies on) ----------
+# ------------------------
+# Protocols (type hints)
+# ------------------------
 
 class Auth0Client(Protocol):
     def authorize_redirect(self, redirect_uri: str) -> Any: ...
@@ -41,8 +42,9 @@ class AuthClient(Protocol):
     @property
     def auth0(self) -> Auth0Client: ...
 
-
-# ---------- Runtime adapter (no third-party types leak into our code) ----------
+# ------------------------
+# Runtime adapters
+# ------------------------
 
 class _RuntimeAuth0(Auth0Client):
     def __init__(self, inner: Any) -> None:
@@ -58,7 +60,6 @@ class _RuntimeAuth0(Auth0Client):
     def userinfo(self) -> dict[str, Any]:
         info = self._inner.userinfo()
         return dict(info) if isinstance(info, dict) else {}
-
 
 class _RuntimeAuth(AuthClient):
     def __init__(self, inner_oauth: Any) -> None:
@@ -83,93 +84,133 @@ class _RuntimeAuth(AuthClient):
 
     @property
     def auth0(self) -> Auth0Client:
-        # Authlib exposes `oauth.auth0` after `register`
         return _RuntimeAuth0(self._inner.auth0)
 
+# ------------------------
+# OAuth bootstrap
+# ------------------------
 
-# ---------- Blueprint setup ----------
-
-auth_bp = Blueprint("auth", __name__)
 oauth: Optional[AuthClient] = None
 
-
-# ---------- Internal helpers ----------
-
-def _init_oauth(app: Flask) -> None:
-    """
-    Register Auth0 only if creds exist (skipped in dev with DISABLE_AUTH=1).
-    Leaves `oauth` as None if not configured or if Authlib is unavailable.
-    """
+def _init_oauth() -> None:
+    """Register Auth0 client if configured."""
     global oauth
-
-    dom = (app.config.get("AUTH0_DOMAIN") or "").strip()
-    cid = (app.config.get("AUTH0_CLIENT_ID") or "").strip()
-    csec = (app.config.get("AUTH0_CLIENT_SECRET") or "").strip()
+    dom = (current_app.config.get("AUTH0_DOMAIN") or "").strip()
+    cid = (current_app.config.get("AUTH0_CLIENT_ID") or "").strip()
+    csec = (current_app.config.get("AUTH0_CLIENT_SECRET") or "").strip()
     if not (dom and cid and csec):
-        return  # not configured -> bypass (e.g., local dev)
-
+        oauth = None
+        return
     try:
         m = importlib.import_module("authlib.integrations.flask_client")
-        OAuthRuntime = getattr(m, "OAuth", None)
+        OAuth = getattr(m, "OAuth", None)
     except Exception:
-        OAuthRuntime = None
+        OAuth = None
 
-    if OAuthRuntime is None:
+    if OAuth is None:
+        oauth = None
         return
 
-    runtime = OAuthRuntime(app)
-    oauth_runtime = _RuntimeAuth(runtime)
-    oauth_runtime.register(
+    runtime = OAuth(current_app)
+    client = _RuntimeAuth(runtime)
+    client.register(
         "auth0",
         client_id=cid,
         client_secret=csec,
         server_metadata_url=f"https://{dom}/.well-known/openid-configuration",
         client_kwargs={"scope": "openid profile email"},
     )
-    oauth = oauth_runtime
-
+    oauth = client
 
 @auth_bp.record_once
 def _on_load(state) -> None:
-    _init_oauth(state.app)
+    # Initialize OAuth once the blueprint is registered
+    with state.app.app_context():
+        _init_oauth()
 
+# ------------------------
+# Dev user helper
+# ------------------------
 
 def _ensure_dev_user() -> User:
-    """Create or get a durable local dev user with a stable UUID."""
-    from flask import current_app
-    email = "dev@local.test"
-    dev_id = current_app.config.get("DEV_USER_ID")
-    user = db.session.query(User).filter_by(email=email).first()
+    """
+    Create or fetch a durable local dev user.
+    Uses DEV_USER_EMAIL (config) or a sensible default.
+    """
+    email = current_app.config.get("DEV_USER_EMAIL", "dev@mailtrace.local")
+    user = User.query.filter_by(email=email).first()
     if not user:
-        user = User(id=dev_id, email=email, full_name="Dev User", provider="dev")
+        user = User(email=email, full_name="Dev User", provider="dev")
         db.session.add(user)
         db.session.commit()
     return user
 
+def _dev_autologin_if_configured() -> None:
+    """
+    In dev (DISABLE_AUTH=1), ensure session has a valid user.
+    No-op in prod.
+    """
+    if not current_app.config.get("DISABLE_AUTH"):
+        return
+    if "user_id" in session:
+        return
+    # Only trust local access for the silent autologin behavior
+    if request.remote_addr in {"127.0.0.1", "::1"}:
+        u = _ensure_dev_user()
+        session["user_id"] = str(u.id)
+        session["email"] = u.email
 
-# ---------- Public decorator ----------
-def login_required(f):
+# Run for every request (blueprint-scoped, applies app-wide)
+@auth_bp.before_app_request
+def _attach_user_and_dev_autologin():
+    _dev_autologin_if_configured()
+    # (Optionally expose on g if you prefer; session is sufficient for now.)
+
+# ------------------------
+# Decorators
+# ------------------------
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+def login_required(fn: F) -> F:
     """
-    Bypass auth locally (DISABLE_AUTH=1) but still provide a valid user_id UUID.
-    Otherwise, require an authenticated session.
+    For web routes: redirect to /auth/login when unauthenticated.
+    In dev with DISABLE_AUTH=1, a dev user is automatically created/logged in.
     """
-    @wraps(f)
+    @wraps(fn)
     def wrapper(*args, **kwargs):
-        if current_app.config.get("DISABLE_AUTH"):
-            if "user_id" not in session:
+        if "user_id" not in session:
+            if current_app.config.get("DISABLE_AUTH"):
+                # Ensure dev user (in case before_request didn't run—e.g., tests)
                 u = _ensure_dev_user()
                 session["user_id"] = str(u.id)
                 session["email"] = u.email
-            return f(*args, **kwargs)
+            else:
+                nxt = request.full_path or request.path
+                return redirect(url_for("auth.login", next=nxt))
+        return fn(*args, **kwargs)
+    return cast(F, wrapper)
 
+def api_login_required(fn: F) -> F:
+    """
+    For API routes: return JSON 401 (no redirects) when unauthenticated.
+    In dev with DISABLE_AUTH=1, a dev user is automatically created/logged in.
+    """
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
         if "user_id" not in session:
-            return redirect(url_for("auth.login", next=request.full_path))
-        return f(*args, **kwargs)
+            if current_app.config.get("DISABLE_AUTH"):
+                u = _ensure_dev_user()
+                session["user_id"] = str(u.id)
+                session["email"] = u.email
+            else:
+                return jsonify({"error": "unauthorized", "message": "Please sign in to continue."}), 401
+        return fn(*args, **kwargs)
+    return cast(F, wrapper)
 
-    return wrapper
-
-
-# ---------- Routes ----------
+# ------------------------
+# Routes
+# ------------------------
 
 @auth_bp.get("/login")
 def login():
@@ -178,7 +219,7 @@ def login():
         u = _ensure_dev_user()
         session["user_id"] = str(u.id)
         session["email"] = u.email
-        return redirect(request.args.get("next") or url_for("dashboard.index"))
+        return redirect(request.args.get("next") or "/")
 
     # Real OAuth
     if oauth is None:
@@ -186,7 +227,6 @@ def login():
 
     redirect_uri = url_for("auth.callback", _external=True)
     return oauth.auth0.authorize_redirect(redirect_uri)
-
 
 @auth_bp.get("/callback")
 def callback():
@@ -199,9 +239,9 @@ def callback():
     name = (userinfo or {}).get("name", "")
 
     if not email:
-        return jsonify({"error": "No email in identity"}), 400
+        return jsonify({"error": "No email from identity provider"}), 400
 
-    user = db.session.query(User).filter_by(email=email).first()
+    user = User.query.filter_by(email=email).first()
     if not user:
         user = User(email=email, full_name=name, provider="auth0")
         db.session.add(user)
@@ -209,10 +249,24 @@ def callback():
 
     session["user_id"] = str(user.id)
     session["email"] = user.email
-    return redirect(request.args.get("next") or url_for("dashboard.index"))
-
+    return redirect(request.args.get("next") or "/")
 
 @auth_bp.get("/logout")
 def logout():
     session.clear()
+    # If you want to trigger Auth0 logout later, redirect to AUTH0_LOGOUT_URL
     return redirect(current_app.config.get("AUTH0_LOGOUT_URL") or "/")
+
+# Small diagnostics/helpers (optional)
+
+@auth_bp.get("/me")
+def me():
+    """Who am I (for debugging UI)?"""
+    if "user_id" not in session:
+        return jsonify({"authenticated": False})
+    return jsonify({
+        "authenticated": True,
+        "user_id": session.get("user_id"),
+        "email": session.get("email"),
+        "dev": bool(current_app.config.get("DISABLE_AUTH")),
+    })

@@ -31,13 +31,13 @@ def create_app() -> Flask:
     if app.config.get("DISABLE_AUTH"):
         @app.before_request
         def _dev_autologin():
+            # Only trust local requests in dev
             if "user_id" in session:
                 return
-            # Only trust localhost
             if request.remote_addr in {"127.0.0.1", "::1"}:
                 from app.blueprints.auth import _ensure_dev_user
                 u = _ensure_dev_user()
-                session["user_id"] = str(u.id)
+                session["user_id"] = str(u.id)     # <- real UUID from DB
                 session["email"] = u.email
     # -------------------------------------------------------
 
@@ -47,23 +47,17 @@ def create_app() -> Flask:
     app.storage = LocalStorage(uploads_root)
 
     # Register blueprints (import inside the factory)
-    from .blueprints.dashboard_routes import dashboard_bp
     from .blueprints.api import api_bp
     from .blueprints.auth import auth_bp
     from .blueprints.billing import billing_bp
     from .blueprints.map import map_bp
     from .blueprints.health import health_bp
 
-    app.register_blueprint(dashboard_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(auth_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(map_bp)
     app.register_blueprint(health_bp)
-
-    @app.route("/")
-    def index():
-        return redirect(url_for("dashboard.index"))
 
     @app.route("/favicon.ico")
     def favicon():

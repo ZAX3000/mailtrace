@@ -4,7 +4,7 @@ import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
 import { useUploadGuard } from '@/composables/useUploadGuard'
-import MatchUpload from '@/components/MatchUpload.vue'
+import UploadCard from '@/components/UploadCard.vue'
 
 declare global {
   interface Window {
@@ -39,7 +39,7 @@ onMounted(async () => {
 
     <div class="row">
       <!-- Upload panel -->
-      <MatchUpload class="card" style="flex:1 1 380px; min-width:340px" />
+      <UploadCard class="card" style="flex:1 1 380px; min-width:340px" />
 
       <!-- KPI bar -->
       <div

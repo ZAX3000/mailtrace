@@ -38,6 +38,11 @@ class KnownUserError(APIError):
     status_code = 400
     error = "KnownUserError"
 
+class Conflict(APIError):
+    status_code = 409
+    error = "Conflict"
+
+
 def register_error_handlers(app):
     # Catch our APIError family
     @app.errorhandler(APIError)

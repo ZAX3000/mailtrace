@@ -22,13 +22,13 @@ CANON_COLS = [
     "address2",
     "city",
     "state",
-    "postal_code",
+    "zip",
     "job_date",
     "job_value",
 ]
 
 # Required AFTER aliasing (crm_id/source_id are optional)
-REQUIRED: set[str] = {"address1", "city", "state", "postal_code", "job_date"}
+REQUIRED: set[str] = {"address1", "city", "state", "zip", "job_date"}
 
 ALIASES: Dict[str, List[str]] = {
     "crm_id": ["crm_id", "lead_id", "job_id", "id"],  # if CSV has "id", we treat as crm_id by default
@@ -37,7 +37,7 @@ ALIASES: Dict[str, List[str]] = {
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
     "state": ["state", "st"],
-    "postal_code": ["postal_code", "zip", "zipcode", "zip_code", "zip code"],
+    "zip": ["postal_code", "zip", "zipcode", "zip_code", "zip code"],
     "job_date": ["job_date", "date", "created_at", "job date"],
     "job_value": ["job_value", "amount", "value", "revenue", "job value"],
 }
@@ -83,7 +83,7 @@ def ensure_staging_crm(engine: Engine) -> None:
                     address2    TEXT NULL,
                     city        TEXT NOT NULL,
                     state       TEXT NOT NULL,
-                    postal_code TEXT NOT NULL,
+                    zip TEXT NOT NULL,
                     job_date    DATE NOT NULL,
                     job_value   NUMERIC(12,2) NULL
                 )
@@ -299,7 +299,7 @@ def copy_crm_csv_path(
     No temp tables/files. In-memory aliasing + batched INSERTs.
 
     `mapping` (optional): dict of canonical_name -> original_header
-       canonical in: crm_id, source_id, address1, address2, city, state, postal_code, job_date, job_value
+       canonical in: crm_id, source_id, address1, address2, city, state, zip, job_date, job_value
     """
     assert_postgres(engine)
     ensure_staging_crm(engine)
@@ -371,7 +371,7 @@ def copy_crm_csv_path(
                     "address2": get_val(row, "address2") or None,
                     "city": get_val(row, "city"),
                     "state": get_val(row, "state"),
-                    "postal_code": get_val(row, "postal_code"),
+                    "zip": get_val(row, "postal_code"),
                     "job_date": job_date_iso,
                     "job_value": job_value_val,
                 }
