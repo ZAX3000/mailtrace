@@ -5,14 +5,12 @@ from typing import Tuple, Dict, Any, List, Optional, Set
 import csv
 import io
 
-from app.dao import mapper_dao, run_dao
-from app.services.pipeline import maybe_kick_matching
+from app.dao import mapper_dao
 
-# Required columns per side (canonical normalized shape)
-REQUIRED_MAIL = {"id", "address1", "city", "state", "zip", "sent_date"}
-REQUIRED_CRM  = {"crm_id", "address1", "city", "state", "zip", "job_date"}
+# Required columns per source (canonical normalized shape)
+REQUIRED_MAIL = {"address1", "city", "state", "zip", "sent_date"}
+REQUIRED_CRM  = {"address1", "city", "state", "zip", "job_date"}
 
-# Reasonable alias map used during normalization (post-mapping)
 ALIAS_MAIL = {
     "id": ["id", "mail_id", "record_id"],  # maps to source_id
     "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
@@ -36,8 +34,8 @@ ALIAS_CRM = {
     "job_value": ["job_value", "amount", "value", "revenue", "job value"],
 }
 
-def _canon_for(side: str):
-    if side == "mail":
+def _canon_for(source: str):
+    if source == "mail":
         return REQUIRED_MAIL, ALIAS_MAIL
     return REQUIRED_CRM, ALIAS_CRM
 
@@ -83,88 +81,48 @@ def _missing_required(normalized_rows: List[dict], required: Set[str]) -> Set[st
 def ingest_raw_file(
     run_id: str,
     user_id: str,
-    side: str,                 # 'mail' | 'crm'
+    source: str,
     file_stream,
     *,
     filename: str = "",
 ) -> Tuple[str, Dict[str, Any]]:
     """
-    1) Read CSV → list[dict]
-    2) Save RAW (JSONB) rows
-    3) Try to normalize using any saved mapping; if missing required cols → return 409 payload
-    4) If normalized saved, bump run status counters and maybe kick matching
+    Upload step: store RAW only. Never normalize here.
     Returns:
-      ("need_mapping", {missing, sample_headers, sample_rows, run_id, side, state:'raw_only'})
-      or
-      ("ok", {run_id, side, state:'ready', count:norm_count})
+      ("ok", {run_id, source, state:'raw_only', raw_count, sample_headers, sample_rows})
     """
-    side = (side or "").lower().strip()
-    if side not in {"mail", "crm"}:
-        raise ValueError(f"invalid side: {side}")
+    source = (source or "").lower().strip()
+    if source not in {"mail", "crm"}:
+        raise ValueError(f"invalid source: {source}")
 
-    # 1) CSV → rows
     raw_rows = _csv_to_rows(file_stream)
 
-    # 2) SAVE RAW  (*** FIXED ARG ORDER: includes user_id ***)
-    mapper_dao.insert_raw_rows(run_id, user_id, side, raw_rows)
+    mapper_dao.insert_raw_rows(run_id, user_id, source, raw_rows)
 
-    # 3) Try normalize using saved mapping (if any)
-    required, alias = _canon_for(side)
-    mapping = mapper_dao.get_mapping(run_id, side)  # {} if none
+    hdrs = mapper_dao.get_raw_headers(run_id, source, sample=25)
 
-    normalized = _apply_mapping(raw_rows, mapping, alias)
-    missing = _missing_required(normalized, set(required))
+    return (
+        "ok",
+        {
+            "run_id": run_id,
+            "source": source,
+            "state": "raw_only",
+            "raw_count": len(raw_rows),
+            "sample_headers": hdrs.get("headers", []),
+            "sample_rows": hdrs.get("sample_rows", []),
+            "message": "RAW uploaded",
+        },
+    )
 
-    if missing:
-        # Return hints for the mapper modal
-        hdrs = mapper_dao.get_raw_headers(run_id, side, sample=25)
-        return (
-            "need_mapping",
-            {
-                "run_id": run_id,
-                "side": side,
-                "state": "raw_only",
-                "missing": sorted(missing),
-                "sample_headers": hdrs.get("headers", []),
-                "sample_rows": hdrs.get("sample_rows", []),
-                "message": "Mapping required",
-            },
-        )
-
-    # 4) Persist normalized
-    if side == "mail":
-        count = mapper_dao.insert_normalized_mail(run_id, user_id, normalized)
-        run_dao.update_counts(run_id, mail_count=count, mail_ready=True)
-    else:
-        count = mapper_dao.insert_normalized_crm(run_id, user_id, normalized)
-        run_dao.update_counts(run_id, crm_count=count, crm_ready=True)
-
-    # 5) If both sides ready, kick matching
-    maybe_kick_matching(run_id)
-
-    return ("ok", {"run_id": run_id, "side": side, "state": "ready", "count": count})
-
-def get_headers(run_id: str, side: str, sample: int = 25) -> Dict[str, Any]:
+def get_headers(run_id: str, source: str, sample: int = 25) -> Dict[str, Any]:
     """Proxy DAO for the mapper UI."""
-    return mapper_dao.get_raw_headers(run_id, side, sample)
+    return mapper_dao.get_raw_headers(run_id, source, sample)
 
-def get_mapping(run_id: str, side: str) -> Dict[str, Any]:
-    return mapper_dao.get_mapping(run_id, side)
+def get_mapping(run_id: str, source: str) -> Dict[str, Any]:
+    return mapper_dao.get_mapping(run_id, source)
 
-def save_mapping(run_id: str, side: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    # Persist, then attempt normalize immediately from RAW
-    # NOTE: controller should pass user_id; we need it for normalized rows
-    raise NotImplementedError("Controller should call save_mapping_with_user(user_id=...)")
-
-def save_mapping_with_user(run_id: str, user_id: str, side: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    required, alias = _canon_for(side)
-    mapper_dao.save_mapping(run_id, user_id, side, mapping)
-
-    # Pull RAW again and normalize with new mapping
-    hdrs = mapper_dao.get_raw_headers(run_id, side, sample=1)  # cheap existence check
-    # (If you add a DAO method to fetch ALL RAW rows, use it here. For now, re-read in caller or add DAO.)
-    # Assuming RAW exists; if not, just return mapping ack.
-    # Re-normalize path would mirror ingest_raw_file after "mapping" is provided.
-    # For brevity, just ack mapping here:
-    maybe_kick_matching(run_id)
-    return {"ok": True, "run_id": run_id, "side": side, "mapping_saved": True}
+def save_mapping(run_id: str, user_id: str, source: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
+    required, alias = _canon_for(source)
+    mapper_dao.save_mapping(run_id, user_id, source, mapping)
+    hdrs = mapper_dao.get_raw_headers(run_id, source, sample=1)  # cheap existence check
+    return {"ok": True, "run_id": run_id, "source": source, "mapping_saved": True}

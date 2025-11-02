@@ -84,7 +84,7 @@ class Run(db.Model):
     crm_count = db.Column(db.Integer)
     match_count = db.Column(db.Integer)
 
-    # Whether each side has been normalized
+    # Whether each source has been normalized
     mail_ready = db.Column(db.Boolean, default=False, nullable=False)
     crm_ready = db.Column(db.Boolean, default=False, nullable=False)
 
@@ -136,7 +136,7 @@ class Match(db.Model):
     run_id = db.Column(UUID(as_uuid=True), db.ForeignKey("runs.id"), nullable=False)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
-    # CRM side
+    # CRM source
     crm_id = db.Column(db.String)
     crm_job_date = db.Column(db.Date)
     job_value = db.Column(db.Numeric(12, 2))
@@ -177,7 +177,7 @@ class GeoPoint(db.Model):
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
     run_id = db.Column(UUID(as_uuid=True), db.ForeignKey("runs.id"), nullable=False)
 
-    kind = db.Column(db.String, nullable=False)  # 'mail' | 'crm' | 'match'
+    source = db.Column(db.String, nullable=False)  # 'mail' | 'crm' | 'match'
     label = db.Column(db.String)
     address = db.Column(db.String)
     lat = db.Column(db.Float)
@@ -186,6 +186,6 @@ class GeoPoint(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     __table_args__ = (
-        Index("idx_geo_user_kind_date", "user_id", "kind", "event_date"),
-        Index("idx_geo_run_kind", "run_id", "kind"),
+        Index("idx_geo_user_kind_date", "user_id", "source", "event_date"),
+        Index("idx_geo_run_kind", "run_id", "source"),
     )

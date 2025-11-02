@@ -35,40 +35,57 @@ def create_run():
     run_id = pipeline.create_or_get_active_run(user_id)  # service handles DAO
     return jsonify({"run_id": str(run_id)}), 201
 
-@api_bp.post("/runs/<uuid:run_id>/uploads/<kind>")
-def upload_raw(run_id, kind):
+@api_bp.post("/runs/<uuid:run_id>/uploads/<source>")
+def upload_raw(run_id, source):
     _ensure_dev_session_user()
     user_id = session.get("user_id")
     f = request.files.get("file")
     if not f:
         raise BadRequest("missing file")
-    # service parses CSV and writes RAW rows; may return 409-need_mapping payload
-    status, payload = svc_ingest_raw_file(str(run_id), str(user_id), kind, f.stream, filename=f.filename)
-    if status == "need_mapping":
-        return jsonify(payload), 409
-    return jsonify(payload), 201  # {run_id, side, state:'ready'|'raw_only'}
+    # service parses CSV and writes RAW rows ONLY
+    payload = svc_ingest_raw_file(str(run_id), str(user_id), source, f.stream, filename=f.filename)
+    return jsonify(payload), 201  # always RAW-only at upload
 
 @api_bp.post("/runs/<uuid:run_id>/mapping")
 def save_mapping(run_id):
     _ensure_dev_session_user()
     payload = request.get_json(force=True) or {}
-    kind = (payload.get("kind") or "mail").lower()
+    source = (payload.get("source") or "mail").lower()
     mapping = payload.get("mapping") or {}
-    out = svc_save_mapping(str(run_id), kind, mapping)
+    out = svc_save_mapping(str(run_id), source, mapping)
     return jsonify(out)
+
+@api_bp.post("/runs/<uuid:run_id>/run")
+def start_run(run_id):
+    _ensure_dev_session_user()
+    user_id = session.get("user_id")
+
+    # Server-side readiness check (you’ll implement in pipeline)
+    missing = pipeline.check_mapping_readiness(str(run_id))  # {} if ready
+    if missing:
+        return jsonify({"message": "Mapping required", "missing": missing}), 409
+
+    # Normalize from RAW → staging_* and update counts/ready flags
+    pipeline.normalize_from_raw(str(run_id), str(user_id), "mail")
+    pipeline.normalize_from_raw(str(run_id), str(user_id), "crm")
+
+    # Kick matching if both sources are ready
+    pipeline.maybe_kick_matching(str(run_id))
+
+    return jsonify({"ok": True}), 202
 
 @api_bp.get("/runs/<uuid:run_id>/headers")
 def headers_for_mapper(run_id):
     _ensure_dev_session_user()
-    kind = (request.args.get("kind") or "mail").lower()
+    source = (request.args.get("source") or "mail").lower()
     sample = int(request.args.get("sample") or 25)
-    return jsonify(svc_get_headers(str(run_id), kind, sample))
+    return jsonify(svc_get_headers(str(run_id), source, sample))
 
 @api_bp.get("/runs/<uuid:run_id>/mapping")
 def get_mapping(run_id):
     _ensure_dev_session_user()
-    kind = (request.args.get("kind") or "mail").lower()
-    return jsonify(svc_get_mapping(str(run_id), kind))
+    source = (request.args.get("source") or "mail").lower()
+    return jsonify(svc_get_mapping(str(run_id), source))
 
 @api_bp.get("/runs/<uuid:run_id>/status")
 def run_status(run_id):

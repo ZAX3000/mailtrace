@@ -3,6 +3,7 @@
 import { ref, onMounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
+import ModalMappingRequired from '@/components/ModalMappingRequired.vue'
 import { useUploadGuard } from '@/composables/useUploadGuard'
 import UploadCard from '@/components/UploadCard.vue'
 
@@ -17,8 +18,21 @@ const route = useRoute()
 const router = useRouter()
 const showUploadGuard = ref(false)
 
-// create the guard; pass a function that opens our modal
+// new: mapping modal state
+const showMapping = ref(false)
+const missing = ref<{ mail?: string[]; crm?: string[] }>({})
+
 useUploadGuard(() => (showUploadGuard.value = true))
+
+function onMappingRequired(payload: { mail?: string[]; crm?: string[] }) {
+  missing.value = payload || {}
+  showMapping.value = true
+}
+
+function openMapper() {
+  const run_id = window.MT_CONTEXT?.run_id || ''
+  window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id } }))
+}
 
 onMounted(async () => {
   const runId = (route.query.run_id as string) || ''
@@ -29,17 +43,19 @@ onMounted(async () => {
   await nextTick()
   window.initDashboard?.(runId)
 })
-
 </script>
 
 <template>
-  <!-- Paste/keep your dashboard BODY content here so legacy JS finds the same selectors. -->
   <div class="wrap">
     <div class="err" id="err"><b>JavaScript error:</b> <span id="errmsg"></span></div>
 
     <div class="row">
       <!-- Upload panel -->
-      <UploadCard class="card" style="flex:1 1 380px; min-width:340px" />
+      <UploadCard
+        class="card"
+        style="flex:1 1 380px; min-width:340px"
+        @mapping-required="onMappingRequired"
+      />
 
       <!-- KPI bar -->
       <div
@@ -135,22 +151,12 @@ onMounted(async () => {
     </div>
   </div>
 
-  <!-- Missing-field popup (IDs kept for legacy) -->
-  <div aria-hidden="true" id="mtPopupOverlay">
-    <div aria-labelledby="mtPopupTitle" aria-modal="true" id="mtPopup" role="alertdialog">
-      <header>
-        <h3 id="mtPopupTitle">Missing required mappings</h3>
-        <button class="btn" id="mtPopupClose" title="Close">Close</button>
-      </header>
-      <div class="body">
-        <p>We couldn’t proceed because the following required fields aren’t mapped yet:</p>
-        <ul id="mtPopupList"></ul>
-      </div>
-      <footer>
-        <button class="btn primary" id="mtPopupOk">OK—take me back</button>
-      </footer>
-    </div>
-  </div>
+  <!-- Missing-field popup: new Vue modal -->
+  <ModalMappingRequired
+    v-model="showMapping"
+    :missing="missing"
+    @edit-mapping="openMapper"
+  />
 
   <!-- Simple alert modal (IDs kept for legacy) -->
   <ModalUploadGuard

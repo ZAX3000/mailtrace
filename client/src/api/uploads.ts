@@ -1,7 +1,7 @@
 // src/api/uploads.ts
 import { http } from './http'
 
-export type Side = 'mail' | 'crm'
+export type Source = 'mail' | 'crm'
 export type UploadState = 'ready' | 'raw_only'
 
 export interface CreateRunRes {
@@ -10,7 +10,7 @@ export interface CreateRunRes {
 
 export interface UploadRes {
   run_id: string
-  side: Side
+  source: Source
   state: UploadState                 // 'ready' => normalized; 'raw_only' => needs mapper
   // Optional hints the server may return (esp. when state === 'raw_only')
   missing?: string[]
@@ -26,16 +26,16 @@ export async function createRun(): Promise<CreateRunRes> {
 }
 
 /**
- * Upload one side (mail|crm). Server ingests RAW and may immediately normalize.
+ * Upload one source (mail|crm). Server ingests RAW and may immediately normalize.
  * - 201 → { state: 'ready' | 'raw_only' }
  * - 409 → mapping required (handled here; returns { state: 'raw_only', ...hints })
  */
-export async function uploadSide(runId: string, kind: Side, file: File): Promise<UploadRes> {
+export async function uploadSource(runId: string, source: Source, file: File): Promise<UploadRes> {
   const fd = new FormData()
   fd.append('file', file)
 
   const res = await http.post<UploadRes>(
-    `/runs/${runId}/uploads/${kind}`,
+    `/runs/${runId}/uploads/${source}`,
     fd,
     {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -49,7 +49,7 @@ export async function uploadSide(runId: string, kind: Side, file: File): Promise
     const data: any = res.data || {}
     return {
       run_id: runId,
-      side: kind,
+      source: source,
       state: 'raw_only',
       missing: data.missing,
       sample_headers: data.sample_headers,

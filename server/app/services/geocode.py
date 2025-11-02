@@ -28,11 +28,11 @@ def geocode_addresses_plain(
     addresses: Iterable[tuple[str, str, int, int | None, date | None]]
 ) -> Iterator[Dict[str, Any]]:
     """
-    Input: iterable of (kind, address, user_id, run_id, event_date)
+    Input: iterable of (source, address, user_id, run_id, event_date)
     Yields dicts suitable for writing to the map cache (no ORM objects).
     """
     token = current_app.config.get("MAPBOX_TOKEN", "").strip()
-    for kind, addr, user_id, run_id, dt in addresses:
+    for source, addr, user_id, run_id, dt in addresses:
         if not addr:
             continue
         gl = _mapbox(addr, token)
@@ -42,9 +42,9 @@ def geocode_addresses_plain(
         yield {
             "lat": lat,
             "lon": lon,
-            "label": (kind or "match").capitalize(),
+            "label": (source or "match").capitalize(),
             "address": addr,
-            "kind": kind or "match",
+            "source": source or "match",
             "run_id": run_id,
             "event_date": dt.isoformat() if dt else None,
             # optional: include user_id if you want it in properties

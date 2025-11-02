@@ -91,21 +91,27 @@ def update_urls(run_id: str, *, mail_url: Optional[str] = None, crm_url: Optiona
     db.session.commit()
 
 
-def update_counts(run_id: str, *, mail_count: Optional[int] = None, match_count: Optional[int] = None) -> None:
+# app/dao/run_dao.py
+def update_counts(
+    run_id: str,
+    mail_count: int | None = None,
+    crm_count: int | None = None,
+    mail_ready: bool | None = None,
+    crm_ready: bool | None = None,
+) -> None:
     sets = []
-    params = {"id": str(run_id)}
+    params = {"rid": run_id}
     if mail_count is not None:
-        sets.append("mail_count = :mail_count")
-        params["mail_count"] = int(mail_count)
-    if match_count is not None:
-        sets.append("match_count = :match_count")
-        params["match_count"] = int(match_count)
-    if not sets:
-        return
-    db.session.execute(text(f"""
-        UPDATE runs SET {", ".join(sets)} WHERE id = :id
-    """), params)
-    db.session.commit()
+        sets.append("mail_count = :mail_count"); params["mail_count"] = mail_count
+    if crm_count is not None:
+        sets.append("crm_count = :crm_count"); params["crm_count"] = crm_count
+    if mail_ready is not None:
+        sets.append("mail_ready = :mail_ready"); params["mail_ready"] = mail_ready
+    if crm_ready is not None:
+        sets.append("crm_ready = :crm_ready"); params["crm_ready"] = crm_ready
+    if sets:
+        db.session.execute(text(f"UPDATE runs SET {', '.join(sets)} WHERE id = :rid"), params)
+        db.session.commit()
 
 
 def complete(run_id: str) -> None:

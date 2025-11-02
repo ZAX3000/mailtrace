@@ -12,7 +12,6 @@ from .staging_common import assert_postgres
 SCHEMA = "staging"
 TABLE = f"{SCHEMA}.mail"
 
-# We INSERT these (the auto PK `id` is not part of inserts)
 CANON_COLS = [
     "run_id",       # required
     "source_id",    # CSV id (nullable)
@@ -24,7 +23,6 @@ CANON_COLS = [
     "sent_date",
 ]
 
-# Required AFTER aliasing (by column name presence in header mapping, not per-row values)
 REQUIRED: set[str] = {"address1", "city", "state", "zip", "sent_date"}
 
 ALIASES: Dict[str, List[str]] = {

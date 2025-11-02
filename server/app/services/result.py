@@ -6,7 +6,7 @@ from app.dao import run_dao, result_dao  # service may talk to DAOs
 
 def get_result(run_id: str, user_id: str) -> Dict[str, Any]:
     """Return the final result payload for a completed run, enforcing ownership and run state."""
-    meta = run_dao.get(run_id)
+    meta = run_dao.status(run_id)
     if not meta:
         raise NotFound("run not found")
     if str(meta.user_id) != str(user_id):

@@ -1,9 +1,10 @@
-// client/src/stores/loader.ts  (Pinia version with identical API)
+// client\src\stores\loader.ts
 import { defineStore } from 'pinia'
 
-function clamp(n: number) {
-  n = Math.round(n || 0)
-  return Math.max(0, Math.min(100, n))
+type ShowOpts = {
+  progress?: number
+  etaSeconds?: number | null
+  message?: string          // <-- add
 }
 
 export const useLoader = defineStore('loader', {
@@ -11,17 +12,23 @@ export const useLoader = defineStore('loader', {
     open: false,
     progress: 0,
     etaSeconds: null as number | null,
+    message: '' as string,   // <-- add
   }),
   actions: {
-    show(opts?: { progress?: number; etaSeconds?: number | null }) {
+    show(opts: ShowOpts = {}) {
       this.open = true
-      if (opts?.progress != null) this.progress = clamp(opts.progress)
-      if (opts?.etaSeconds !== undefined) this.etaSeconds = opts.etaSeconds ?? null
+      if (typeof opts.progress === 'number') this.progress = opts.progress
+      this.etaSeconds = typeof opts.etaSeconds === 'number' ? opts.etaSeconds : null
+      if (typeof opts.message === 'string') this.message = opts.message // <-- add
     },
-    hide() { this.open = false },
-    setProgress(n: number) { this.progress = clamp(n) },
-    setETA(sec: number | null | undefined) {
-      this.etaSeconds = sec == null ? null : Math.max(0, Math.round(sec))
+    hide() {
+      this.open = false
+      this.progress = 0
+      this.etaSeconds = null
+      this.message = '' // <-- add
     },
+    setProgress(n: number) { this.progress = n },
+    setETA(sec?: number | null) { this.etaSeconds = (typeof sec === 'number' ? sec : null) },
+    setMessage(msg: string) { this.message = msg }, // <-- add
   },
 })

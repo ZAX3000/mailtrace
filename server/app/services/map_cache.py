@@ -15,7 +15,7 @@ class GeoPoint(TypedDict, total=False):
     lon: float
     label: str
     address: str
-    kind: str
+    source: str
     run_id: str | None
     event_date: str | None
     user_id: str | None
@@ -103,7 +103,7 @@ def append_points(points: List[GeoPoint], max_points: int = 5000) -> str:
         props = {
             "label": p.get("label", "") or "",
             "address": p.get("address", "") or "",
-            "kind": p.get("kind", "") or "",
+            "source": p.get("source", "") or "",
             "run_id": p.get("run_id"),
             "event_date": p.get("event_date"),
             "user_id": p.get("user_id"),

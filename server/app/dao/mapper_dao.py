@@ -97,6 +97,23 @@ def get_raw_headers(run_id: str, source: str, sample: int = 25) -> Dict[str, Any
         "sample_rows": sample_rows,
     }
 
+def get_raw_rows(run_id: str, source: str) -> List[Dict[str, Any]]:
+    """
+    Return all original CSV rows from RAW as plain dicts, ordered by rownum.
+    Tables: staging_raw_mail / staging_raw_crm with (run_id, user_id, rownum, data jsonb)
+    """
+    tbl = _tbl_raw(source)
+    res = db.session.execute(
+        text(f"""
+            SELECT data
+            FROM {tbl}
+            WHERE run_id = :rid
+            ORDER BY rownum ASC
+        """),
+        {"rid": run_id},
+    )
+    return [row._mapping["data"] or {} for row in res]
+
 
 # ---------------------------
 # Mappings (per run + source)
@@ -168,16 +185,16 @@ def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]
 
     payload = []
     for r in rows:
+        mid = r.get("id")
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "id": (r.get("id") or "")[:255],
+            "id": mid,  # keep None, never ""
             "address1": (r.get("address1") or ""),
             "address2": (r.get("address2") or ""),
             "city": (r.get("city") or ""),
             "state": (r.get("state") or ""),
             "zip": (r.get("zip") or ""),
-            # Let PG cast from text → date when needed
             "sent_date": r.get("sent_date") or None,
         })
 
@@ -206,16 +223,17 @@ def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]])
           (:rid, :uid, :crm_id, :address1, :address2, :city, :state, :zip, :job_date, :job_value)
     """)
 
+
     payload = []
     for r in rows:
         job_val = r.get("job_value")
-        # Keep None if empty; if string, let PG cast numeric when valid
         if isinstance(job_val, str):
             job_val = job_val.strip() or None
+        cid = r.get("crm_id")
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "crm_id": (r.get("crm_id") or r.get("id") or "")[:255],
+            "crm_id": cid,  # keep None, never ""
             "address1": (r.get("address1") or ""),
             "address2": (r.get("address2") or ""),
             "city": (r.get("city") or ""),
