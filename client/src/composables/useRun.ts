@@ -1,11 +1,7 @@
-import { ref } from 'vue'
+// src/composables/useRun.ts
+import { nextTick, ref } from 'vue'
 import { useLoader } from '@/stores/loader'
 import { getRunStatus, startRun, type RunStatus, type StartRunResponse } from '@/api/runs'
-
-type RunOutcome =
-  | { kind: 'needs-mapping'; missing: Record<string, string[]> }
-  | { kind: 'done' }
-  | { kind: 'error'; message: string }
 
 export function useRun() {
   const loader = useLoader()
@@ -13,61 +9,70 @@ export function useRun() {
 
   async function kickOffAndPoll(
     runId: string,
-    onNeedsMapping?: (missing: Record<string, string[]>) => void
-  ): Promise<RunOutcome> {
-    if (!runId) return { kind: 'error', message: 'No run_id' }
-
-    // Turn on UI state immediately so double-clicks don’t queue runs
+    onNeedsMapping: (missing: Record<string, string[]>) => void
+  ) {
     running.value = true
-    // Show the overlay BEFORE the first network await so failures still show UI
-    loader.show({ progress: 5 })
 
+    loader.show({ progress: 3, message: 'Starting…' })
+    await nextTick()
+
+    let started = false
     try {
-      // 1) Start the run
+      console.debug('[run] ▶ START', { runId })
       const res: StartRunResponse = await startRun(runId)
+      console.debug('[run] startRun ⇦', res)
 
       if (res.kind === 'needs-mapping') {
-        // Close the loader, notify caller, stop here
-        loader.hide()
+        console.debug('[run] needs-mapping → handoff to mapper (hide loader)')
+        loader.hide(true)
         running.value = false
-        onNeedsMapping?.(res.missing)
-        return { kind: 'needs-mapping', missing: res.missing }
+        onNeedsMapping(res.missing)
+        return
       }
 
       if (res.kind === 'error') {
+        console.error('[run] startRun error', res)
         throw new Error(res.message || `Start failed (${res.status})`)
       }
 
-      // Optional signal that polling begins
-      window.dispatchEvent(new CustomEvent('mt:run-started', { detail: { run_id: runId } }))
+      started = true
+      loader.setMessage('Analyzing…')
 
-      // 2) Poll status
-      for (let i = 0; i < 240; i++) { // ~4 min @ 1s
+      console.debug('[run] polling status…')
+      for (let i = 0; i < 240; i++) {
         const s: RunStatus = await getRunStatus(runId)
+        console.debug('[run] status tick', s)
+
         if (typeof s.pct === 'number') loader.setProgress(s.pct)
+        if (s.step || s.message) loader.setMessage(String(s.step || s.message))
 
         const status = String(s.status || '').toLowerCase()
-        if (status === 'done' || status === 'completed') {
-          window.dispatchEvent(new CustomEvent('mt:run-completed', { detail: { run_id: runId } }))
-          return { kind: 'done' }
-        }
-        if (status === 'failed') {
+        const step   = String(s.step   || '').toLowerCase()
+
+        if (status === 'failed' || step === 'failed') {
           throw new Error(s.message || 'Matching failed')
         }
+        if (status === 'done' || status === 'completed' || step === 'done' || s.pct === 100) {
+          break
+        }
+
         await new Promise(r => setTimeout(r, 1000))
       }
 
-      // Timed out polling
-      throw new Error('Run timed out while polling status')
+      loader.setProgress(100)
+      loader.setMessage('Run complete')
+      window.dispatchEvent(new CustomEvent('mt:run-completed', { detail: { run_id: runId } }))
+      console.debug('[run] ✓ COMPLETED')
 
     } catch (e: any) {
-      const msg = e?.message || 'Run error'
-      alert(msg) // or route through a toast
-      return { kind: 'error', message: msg }
+      console.error('[run] ✗ FAILED', e)
+      loader.setProgress(100)
+      loader.setMessage(e?.message || 'Run failed')
+
     } finally {
-      // Always clean up UI
-      loader.hide()
       running.value = false
+      console.debug('[run] ⎋ cleanup: running=false; started=%s (loader left open)', started)
+
     }
   }
 

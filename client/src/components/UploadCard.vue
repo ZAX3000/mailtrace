@@ -9,20 +9,38 @@
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div class="cardlike p-4">
         <label for="mailCsv" class="small">Mail CSV</label>
-        <input id="mailCsv" ref="mailInput" type="file" accept=".csv,text/csv" class="w-full" @change="onPick('mail')" />
+        <input
+          id="mailCsv"
+          ref="mailInput"
+          type="file"
+          accept=".csv,text/csv"
+          class="w-full"
+          @change="onPick('mail')"
+        />
       </div>
 
       <div class="cardlike p-4">
         <label for="crmCsv" class="small">CRM CSV</label>
-        <input id="crmCsv" ref="crmInput" type="file" accept=".csv,text/csv" class="w-full" @change="onPick('crm')" />
+        <input
+          id="crmCsv"
+          ref="crmInput"
+          type="file"
+          accept=".csv,text/csv"
+          class="w-full"
+          @change="onPick('crm')"
+        />
       </div>
     </div>
 
     <!-- Actions -->
     <footer class="actions actions--stack">
-      <button class="btn" >Edit mapping</button>
-      <button class="btn" :disabled="running" @click="onRun">
-        <span v-if="!running">Run</span><span v-else>Running…</span>
+      <button class="btn" type="button" @click="openMapper('mail')">
+        Edit mapping
+      </button>
+
+      <button class="btn" :disabled="running" type="button" @click="onRun">
+        <span v-if="!running">Run</span>
+        <span v-else>Running…</span>
       </button>
     </footer>
   </section>
@@ -32,6 +50,7 @@
 import { ref } from 'vue'
 import { useRun } from '@/composables/useRun'
 import { createRun, uploadSource, type Source } from '@/api/uploads'
+import { log } from '@/utils/logger'
 
 const emit = defineEmits<{
   (e: 'mapping-required', missing: Record<string, string[]>): void
@@ -43,9 +62,11 @@ const crmInput  = ref<HTMLInputElement | null>(null)
 
 async function ensureRun() {
   if (!runId.value) {
+    log.debug('UI ▶ ensureRun: creating run…')
     const { run_id } = await createRun()
     runId.value = run_id
     ;(window as any).MT_CONTEXT = { ...(window as any).MT_CONTEXT, run_id }
+    log.info('UI ▶ ensureRun: run created', { runId: run_id })
   }
 }
 
@@ -63,26 +84,50 @@ async function onPick(source: Source) {
 
   await ensureRun()
   try {
+    log.info('UI ▶ upload start', { runId: runId.value, source, name: file.name, size: file.size })
     const res = await uploadSource(runId.value, source, file)
+    log.info('UI ▶ upload done', { source, res })
+
+    // RAW-only upload → nudge mapper immediately (keeps your existing behavior)
     if (res.state === 'raw_only') {
-      window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, source } }))
+      window.dispatchEvent(
+        new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, source } })
+      )
     }
   } catch (e: any) {
+    log.error('UI ▶ upload failed', e)
     alert(`Upload failed: ${e?.message || 'unknown error'}`)
     if (el) el.value = ''
   }
+}
+
+function openMapper(source: Source) {
+  if (!runId.value) {
+    alert('Create a run by uploading at least one CSV first.')
+    return
+  }
+  log.info('UI ▶ open mapper clicked', { runId: runId.value, source })
+  window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, source } }))
 }
 
 const { running, kickOffAndPoll } = useRun()
 
 async function onRun(ev?: Event) {
   ev?.preventDefault?.()
-  if (!runId.value) { alert('Please upload both CSV files first.'); return }
+  if (!runId.value) {
+    alert('Please upload both CSV files first.')
+    return
+  }
+
+  log.info('UI ▶ Run clicked', { runId: runId.value })
+
+  // Delegate to the composable (it shows the loader immediately, polls, and logs ticks)
   await kickOffAndPoll(runId.value, (missing) => {
-    // open mapper with the server’s missing list
-    window.dispatchEvent(new CustomEvent('mt:open-mapper', {
-      detail: { run_id: runId.value, missing }
-    }))
+    log.warn('UI ▶ needs mapping (409)', { runId: runId.value, missing })
+    emit('mapping-required', missing)
+    window.dispatchEvent(
+      new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, missing } })
+    )
   })
 }
 </script>

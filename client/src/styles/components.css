@@ -20,7 +20,6 @@ main, .container, .content, .dashboard, #app, .app, .page, .wrapper {
 
 /* Forms & basic buttons (plain) */
 button, .btn, input[type="submit"] {
-  appearance: none;
   background: var(--accent-color);
   color: var(--on-accent-color, #fff);
   border: 0;

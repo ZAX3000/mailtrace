@@ -8,6 +8,5 @@
   --brand-color:   var(--blue);
   --accent-color:  var(--green);
 
-  --elev-1: 0 8px 20px rgba(var(--shadow-rgb) / 0.06);
   --elev-2: 0 24px 60px rgba(var(--shadow-rgb) / 0.18);
 }

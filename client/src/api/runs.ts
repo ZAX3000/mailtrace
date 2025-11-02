@@ -1,42 +1,64 @@
-import { get, post } from './http'
+// src/api/runs.ts
+export type StartRunResponse =
+  | { kind: 'ok' }
+  | { kind: 'needs-mapping'; missing: Record<string, string[]> }
+  | { kind: 'error'; status?: number; message?: string }
 
-// ----- Status -----
 export type RunStatus = {
-  run_id: string
-  status?: string
-  pct?: number
+  status?: 'queued' | 'running' | 'done' | 'completed' | 'failed'
   step?: string
   message?: string
+  pct?: number
 }
-export const getRunStatus = (runId: string) => get<RunStatus>(`/runs/${runId}/status`)
-export const getRunResult = (runId: string) => get(`/runs/${runId}/result`)
 
-// ----- Start run (discriminated union) -----
-export type StartRunOk = { kind: 'ok'; status: 200 | 202 }
-export type StartRunNeedsMapping = {
-  kind: 'needs-mapping'
-  status: 409
-  missing: Record<string, string[]> // e.g. { mail:['zip'], crm:['job_date'] }
+const API = (import.meta as any)?.env?.VITE_API_BASE?.toString?.() || '' // e.g. http://localhost:5000
+
+async function safeParse<T>(res: Response): Promise<T | string> {
+  const text = await res.text()
+  try { return JSON.parse(text) as T } catch { return text } // don’t throw on HTML/error pages
 }
-export type StartRunError = { kind: 'error'; status: number; message: string }
 
-export type StartRunResponse = StartRunOk | StartRunNeedsMapping | StartRunError
+function url(path: string) {
+  // If API is set, prefix it; otherwise assume Vite proxy handles /api
+  return API ? `${API}${path}` : path
+}
 
 export async function startRun(runId: string): Promise<StartRunResponse> {
-  try {
-    const res = await post(`/runs/${runId}/run`, {})
-    // Successful kick-off should be 202
-    if (res.status === 202) return { kind: 'ok', status: 202 }
-    // Fallback: some backends 200 on accept; treat as ok
-    if (res.status === 200) return { kind: 'ok', status: 200 }
-    // Unexpected success code
-    return { kind: 'error', status: res.status ?? 0, message: 'Unexpected status' }
-  } catch (e: any) {
-    const status = e?.status ?? 0
-    const data = e?.data
-    if (status === 409 && data && data.missing) {
-      return { kind: 'needs-mapping', status: 409, missing: data.missing as Record<string, string[]> }
+  const res = await fetch(url(`/api/runs/${encodeURIComponent(runId)}/start`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  })
+  const data = await safeParse<StartRunResponse>(res)
+
+  if (!res.ok) {
+    return {
+      kind: 'error',
+      status: res.status,
+      message:
+        typeof data === 'string'
+          ? data || 'Start failed'
+          : (data as any)?.message || 'Start failed',
     }
-    return { kind: 'error', status, message: e?.message || 'Failed to start run' }
   }
+  return (typeof data === 'string' ? { kind: 'error', status: res.status, message: data } : data) as StartRunResponse
+}
+
+export async function getRunStatus(runId: string): Promise<RunStatus> {
+  const res = await fetch(url(`/api/runs/${encodeURIComponent(runId)}/status`), {
+    method: 'GET',
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  })
+
+  if (!res.ok) {
+    // Surface a readable message but don’t crash the poller
+    return {
+      status: 'failed',
+      message: `Status ${res.status} while polling`,
+      pct: 100,
+    }
+  }
+
+  const data = await safeParse<RunStatus>(res)
+  return (typeof data === 'string' ? { status: 'failed', message: data, pct: 100 } : data) as RunStatus
 }

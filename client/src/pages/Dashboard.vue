@@ -1,11 +1,12 @@
 <!-- client/src/pages/Dashboard.vue -->
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
 import ModalMappingRequired from '@/components/ModalMappingRequired.vue'
 import { useUploadGuard } from '@/composables/useUploadGuard'
 import UploadCard from '@/components/UploadCard.vue'
+import { useLoader } from '@/stores/loader'
 
 declare global {
   interface Window {
@@ -16,25 +17,70 @@ declare global {
 
 const route = useRoute()
 const router = useRouter()
-const showUploadGuard = ref(false)
+const loader = useLoader()
 
-// new: mapping modal state
+// Upload guard modal
+const showUploadGuard = ref(false)
+useUploadGuard(() => (showUploadGuard.value = true))
+
+// Mapping modal state
 const showMapping = ref(false)
 const missing = ref<{ mail?: string[]; crm?: string[] }>({})
 
-useUploadGuard(() => (showUploadGuard.value = true))
+// ---- UI handlers ------------------------------------------------------------
 
 function onMappingRequired(payload: { mail?: string[]; crm?: string[] }) {
+  // Hand off UI to mapper: unlock + hide loader, then open modal
+  loader.unlock()
+  loader.hide(true)
   missing.value = payload || {}
   showMapping.value = true
 }
 
 function openMapper() {
+  // If someone clicks "Edit mapping" from the modal’s button:
+  loader.unlock()
+  loader.hide(true)
   const run_id = window.MT_CONTEXT?.run_id || ''
   window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id } }))
 }
 
+// ---- Lifecycle / events -----------------------------------------------------
+
 onMounted(async () => {
+  // Optional: react to app-wide events (useRun already shows/updates loader;
+  // these are helpful for sanity/diagnostics and manual testing)
+  const onRunStarted = (e: any) => {
+    console.info('EVT mt:run-started', e?.detail)
+    loader.lock()
+    loader.show({ progress: 3, message: 'Starting…' })
+  }
+
+  const onRunCompleted = (e: any) => {
+    console.info('EVT mt:run-completed', e?.detail)
+    // Manual-only policy: don’t auto-hide, just mark done
+    loader.setProgress(100)
+    loader.setMessage('Run complete')
+  }
+
+  const onOpenMapper = (e: any) => {
+    console.warn('EVT mt:open-mapper', e?.detail)
+    const miss = (e?.detail?.missing ?? {}) as { mail?: string[]; crm?: string[] }
+    if (Object.keys(miss).length) missing.value = miss
+    // Hand off to mapper overlay: unlock + hide loader, then show modal
+    loader.unlock()
+    loader.hide(true)
+    showMapping.value = true
+  }
+
+  window.addEventListener('mt:run-started', onRunStarted)
+  window.addEventListener('mt:run-completed', onRunCompleted)
+  window.addEventListener('mt:open-mapper', onOpenMapper)
+  ;(window as any).__onRunStarted = onRunStarted
+  ;(window as any).__onRunCompleted = onRunCompleted
+  ;(window as any).__onOpenMapper = onOpenMapper
+
+  // Initialize run id in URL + MT_CONTEXT
   const runId = (route.query.run_id as string) || ''
   if (runId && route.query.run_id !== runId) {
     router.replace({ path: route.path, query: { ...route.query, run_id: runId } })
@@ -42,6 +88,25 @@ onMounted(async () => {
   window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: runId }
   await nextTick()
   window.initDashboard?.(runId)
+
+  // DEBUG console hooks
+  ;(window as any).MT_DEBUG = {
+    showLoader: (p = 15) => loader.show({ progress: p }),
+    hideLoader: () => loader.hide(),
+    lock: () => loader.lock(),
+    unlock: () => loader.unlock(),
+    openMapper: (miss = {}) =>
+      window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id: runId, missing: miss } })),
+  }
+})
+
+onBeforeUnmount(() => {
+  const rs = (window as any).__onRunStarted
+  const rc = (window as any).__onRunCompleted
+  const om = (window as any).__onOpenMapper
+  if (rs) window.removeEventListener('mt:run-started', rs)
+  if (rc) window.removeEventListener('mt:run-completed', rc)
+  if (om) window.removeEventListener('mt:open-mapper', om)
 })
 </script>
 
@@ -126,7 +191,7 @@ onMounted(async () => {
     </div>
   </div>
 
-  <!-- Mapper modal (IDs kept for legacy) -->
+  <!-- Mapper modal (legacy shell) -->
   <div aria-hidden="true" id="mtMapperOverlay">
     <div aria-labelledby="mtMapperTitle" aria-modal="true" id="mtMapperModal" role="dialog">
       <header>
@@ -151,10 +216,10 @@ onMounted(async () => {
     </div>
   </div>
 
-  <!-- Missing-field popup: new Vue modal -->
+  <!-- Missing-field popup (Vue modal) -->
   <ModalMappingRequired
     v-model="showMapping"
-    :missing="missing"
+    v-model:missing="missing"
     @edit-mapping="openMapper"
   />
 

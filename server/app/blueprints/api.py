@@ -1,5 +1,9 @@
 # app/blueprints/api.py
 from __future__ import annotations
+
+from typing import Any, Dict
+from uuid import UUID
+
 from flask import Blueprint, jsonify, request, session, current_app
 
 from app.errors import BadRequest
@@ -14,86 +18,120 @@ from app.services.mapper import (
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
 
-def _ensure_dev_session_user():
+VALID_SOURCES = {"mail", "crm"}
+
+# -----------------------
+# Helpers / dev session
+# -----------------------
+
+def _ensure_dev_session_user() -> None:
     """
     In dev (DISABLE_AUTH=1), ensure session has a real user_id backed by DB.
-    Reuses the helper in auth blueprint to create/get a durable dev user.
     """
     if not current_app.config.get("DISABLE_AUTH"):
         return
     if "user_id" in session:
         return
-    from app.blueprints.auth import _ensure_dev_user
+    from app.blueprints.auth import _ensure_dev_user  # lazy to avoid cycles
     u = _ensure_dev_user()
     session["user_id"] = str(u.id)
     session["email"] = u.email
 
+def _uid() -> str:
+    _ensure_dev_session_user()
+    uid = session.get("user_id")
+    if not uid:
+        # If auth is enabled and there's no user, treat as bad request for now.
+        raise BadRequest("missing session user")
+    return str(uid)
+
+def _norm_source(s: str) -> str:
+    src = (s or "").strip().lower()
+    if src not in VALID_SOURCES:
+        raise BadRequest(f"invalid source: {s!r}")
+    return src
+
+# -----------------------
+# Runs lifecycle
+# -----------------------
+
 @api_bp.post("/runs")
 def create_run():
-    _ensure_dev_session_user()
-    user_id = session.get("user_id")
-    run_id = pipeline.create_or_get_active_run(user_id)  # service handles DAO
+    uid = _uid()
+    run_id = pipeline.create_or_get_active_run(uid)
     return jsonify({"run_id": str(run_id)}), 201
 
+
 @api_bp.post("/runs/<uuid:run_id>/uploads/<source>")
-def upload_raw(run_id, source):
-    _ensure_dev_session_user()
-    user_id = session.get("user_id")
+def upload_raw(run_id: UUID, source: str):
+    uid = _uid()
+    source = _norm_source(source)
+
     f = request.files.get("file")
     if not f:
         raise BadRequest("missing file")
-    # service parses CSV and writes RAW rows ONLY
-    payload = svc_ingest_raw_file(str(run_id), str(user_id), source, f.stream, filename=f.filename)
-    return jsonify(payload), 201  # always RAW-only at upload
+
+    # Parse CSV and store RAW rows (JSONB) only
+    payload: Dict[str, Any] = svc_ingest_raw_file(
+        str(run_id), uid, source, f.stream, filename=f.filename
+    )
+    return jsonify(payload), 201
+
 
 @api_bp.post("/runs/<uuid:run_id>/mapping")
-def save_mapping(run_id):
-    _ensure_dev_session_user()
-    payload = request.get_json(force=True) or {}
-    source = (payload.get("source") or "mail").lower()
-    mapping = payload.get("mapping") or {}
+def save_mapping(run_id: UUID):
+    _ = _uid()
+    body = request.get_json(force=True) or {}
+    source = _norm_source(body.get("source") or "mail")
+    mapping = body.get("mapping") or {}
     out = svc_save_mapping(str(run_id), source, mapping)
-    return jsonify(out)
+    return jsonify(out), 200
 
-@api_bp.post("/runs/<uuid:run_id>/run")
-def start_run(run_id):
-    _ensure_dev_session_user()
-    user_id = session.get("user_id")
 
-    # Server-side readiness check (you’ll implement in pipeline)
-    missing = pipeline.check_mapping_readiness(str(run_id))  # {} if ready
+@api_bp.post("/runs/<uuid:run_id>/start")
+def start_run(run_id: UUID):
+    uid = _uid()
+
+    missing = pipeline.check_mapping_readiness(str(run_id))
     if missing:
         return jsonify({"message": "Mapping required", "missing": missing}), 409
 
-    # Normalize from RAW → staging_* and update counts/ready flags
-    pipeline.normalize_from_raw(str(run_id), str(user_id), "mail")
-    pipeline.normalize_from_raw(str(run_id), str(user_id), "crm")
+    pipeline.mark_start(str(run_id))
 
-    # Kick matching if both sources are ready
+    pipeline.normalize_from_raw(str(run_id), uid, "mail")
+    pipeline.normalize_from_raw(str(run_id), uid, "crm")
+
     pipeline.maybe_kick_matching(str(run_id))
 
     return jsonify({"ok": True}), 202
 
-@api_bp.get("/runs/<uuid:run_id>/headers")
-def headers_for_mapper(run_id):
-    _ensure_dev_session_user()
-    source = (request.args.get("source") or "mail").lower()
-    sample = int(request.args.get("sample") or 25)
-    return jsonify(svc_get_headers(str(run_id), source, sample))
-
-@api_bp.get("/runs/<uuid:run_id>/mapping")
-def get_mapping(run_id):
-    _ensure_dev_session_user()
-    source = (request.args.get("source") or "mail").lower()
-    return jsonify(svc_get_mapping(str(run_id), source))
 
 @api_bp.get("/runs/<uuid:run_id>/status")
-def run_status(run_id):
-    _ensure_dev_session_user()
-    return jsonify(pipeline.get_status(str(run_id)))  # service
+def run_status(run_id: UUID):
+    _ = _uid()
+    return jsonify(pipeline.get_status(str(run_id))), 200
+
 
 @api_bp.get("/runs/<uuid:run_id>/result")
-def run_result(run_id):
-    _ensure_dev_session_user()
-    user_id = session.get("user_id")
-    return jsonify(svc_get_result(str(run_id), str(user_id)))
+def run_result(run_id: UUID):
+    uid = _uid()
+    return jsonify(svc_get_result(str(run_id), uid)), 200
+
+
+# -----------------------
+# Mapper utilities
+# -----------------------
+
+@api_bp.get("/runs/<uuid:run_id>/headers")
+def headers_for_mapper(run_id: UUID):
+    _ = _uid()
+    source = _norm_source(request.args.get("source") or "mail")
+    sample = int(request.args.get("sample") or 25)
+    return jsonify(svc_get_headers(str(run_id), source, sample)), 200
+
+
+@api_bp.get("/runs/<uuid:run_id>/mapping")
+def get_mapping(run_id: UUID):
+    _ = _uid()
+    source = _norm_source(request.args.get("source") or "mail")
+    return jsonify(svc_get_mapping(str(run_id), source)), 200
