@@ -1,21 +1,16 @@
 # app/services/summary.py
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Tuple, Optional, Callable
 from collections import defaultdict
 from datetime import date, datetime
 
-from app.dao import staging_dao
-from app.services.matching import (
-    run_matching,
-    normalize_address1,
-    parse_date_any,
-)
+from app.dao import staging_dao, matches_dao, result_dao
+from app.services.matching import normalize_address1, parse_date_any
 
-# ---------- helpers (no pandas) ----------
+# ---------- small helpers ----------
 
 def _addr_norm_key(addr1: str, city: str, state: str, zip_code: str) -> str:
-    """Normalized address key (no date). Used for Unique Mail Addresses and city/zip denominators."""
     return "|".join([
         normalize_address1(addr1 or ""),
         (city or "").strip().lower(),
@@ -24,7 +19,6 @@ def _addr_norm_key(addr1: str, city: str, state: str, zip_code: str) -> str:
     ])
 
 def _addr_date_key(addr1: str, city: str, state: str, zip_code: str, d: date | None) -> str:
-    """Normalized address + date key. Used for Total Mail and mail-by-month counting."""
     ds = d.isoformat() if isinstance(d, date) else ""
     return _addr_norm_key(addr1, city, state, zip_code) + "|" + ds
 
@@ -43,9 +37,7 @@ def _median(values: List[int]) -> float:
     s = sorted(values)
     n = len(s)
     mid = n // 2
-    if n % 2 == 1:
-        return float(s[mid])
-    return (s[mid - 1] + s[mid]) / 2.0
+    return float(s[mid]) if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
 
 def _parse_mm_dd_yy(s: Any) -> date | None:
     if not isinstance(s, str) or not s.strip():
@@ -58,18 +50,25 @@ def _parse_mm_dd_yy(s: Any) -> date | None:
     except Exception:
         return None
 
-# ---------- KPI & series computation ----------
+def _to_date(v: Any) -> Optional[date]:
+    if isinstance(v, date):
+        return v
+    if isinstance(v, str):
+        try:
+            return datetime.fromisoformat(v).date()
+        except Exception:
+            pass
+        d = parse_date_any(v)
+        if d:
+            return d
+        return _parse_mm_dd_yy(v)
+    return None
+
+# ---------- KPI & series helpers (from staging) ----------
 
 def _compute_mail_uniques(
     mail_rows: Iterable[Dict[str, Any]]
 ) -> Tuple[int, int, Dict[str, int], Dict[str, int]]:
-    """
-    Returns:
-      total_mail_lines (unique by address+date),
-      unique_mail_addresses (unique by address w/o date),
-      mailers_by_month (YYYY-MM → count of unique mail lines),
-      unique_addresses_by_city (city_key → unique addresses count) for city-level match rate
-    """
     seen_mail_line = set()
     seen_unique_addr = set()
     mailers_by_month: Dict[str, int] = defaultdict(int)
@@ -103,10 +102,6 @@ def _compute_mail_uniques(
 def _compute_job_uniques(
     crm_rows: Iterable[Dict[str, Any]]
 ) -> Tuple[int, Dict[str, int]]:
-    """
-    'Total Jobs' excludes duplicates where two jobs occur at the same address on the same day.
-    Dedupe by normalized address + job_date. Also return jobs_by_month for the graph.
-    """
     seen_jobs = set()
     jobs_by_month: Dict[str, int] = defaultdict(int)
 
@@ -127,69 +122,73 @@ def _compute_job_uniques(
     return len(seen_jobs), dict(jobs_by_month)
 
 def _yoy_overlay(series_by_month: Dict[str, int]) -> Dict[str, List[int]]:
-    """
-    Build simple YoY overlay arrays:
-      months: ["YYYY-01", ... "YYYY-12"] for latest year present in the series
-      current: counts for latest year
-      prev:    counts for previous year aligned on months
-    """
     if not series_by_month:
         return {"months": [], "current": [], "prev": []}
-
     years = sorted({int(k.split("-")[0]) for k in series_by_month.keys()})
     cur = years[-1]
     prv = cur - 1
-
     months_labels = [f"{cur}-{m:02d}" for m in range(1, 13)]
     current = [int(series_by_month.get(f"{cur}-{m:02d}", 0)) for m in range(1, 13)]
     prev    = [int(series_by_month.get(f"{prv}-{m:02d}", 0)) for m in range(1, 13)]
-
     return {"months": months_labels, "current": current, "prev": prev}
 
-# ---------- Public API ----------
+# ---------- Core: build + persist via result_dao ----------
 
-def build_payload(run_id: str) -> Dict[str, Any]:
+def build_and_store(
+    run_id: str,
+    user_id: Optional[str] = None,
+    on_progress: Optional[Callable[[str, Optional[int], Optional[str]], None]] = None,
+) -> Dict[str, Any]:
+    def _p(label: str, pct: Optional[int] = None, msg: Optional[str] = None) -> None:
+        try:
+            if callable(on_progress):
+                on_progress(label, pct, msg)
+        except Exception:
+            pass
 
-    # ----- Fetch normalized rows -----
+    # Resolve user_id if not provided (uses helper in result_dao)
+    if not user_id:
+        user_id = getattr(result_dao, "_resolve_user_id_for_run", lambda rid: None)(run_id) or ""
+
+    # 1) Load rows
+    _p("fetch", 91, "Fetching normalized + matches")
     mail_rows = staging_dao.fetch_normalized_mail_rows(run_id)
     crm_rows  = staging_dao.fetch_normalized_crm_rows(run_id)
+    match_rows = matches_dao.fetch_for_run(run_id)  # persisted matches
+    _p("fetch_done", 92, f"Fetched mail={len(mail_rows)} crm={len(crm_rows)} matches={len(match_rows)}")
 
-    # ----- Matching (preserves your algorithm) -----
-    matches: List[Dict[str, Any]] = run_matching(mail_rows, crm_rows)
-
-    # ----- KPIs -----
+    # 2) Denominators from staging
+    _p("kpi", 96, "Computing KPIs")
     total_mail_lines, unique_mail_addresses, mail_by_month, unique_addr_by_city = _compute_mail_uniques(mail_rows)
     total_jobs, jobs_by_month = _compute_job_uniques(crm_rows)
 
-    total_matches = len(matches)
-    match_rate = (total_matches / unique_mail_addresses * 100.0) if unique_mail_addresses else 0.0
-    match_revenue = sum(_safe_float(m.get("job_value", 0)) for m in matches)
-
-    revenue_per_mailer   = (match_revenue / total_mail_lines) if total_mail_lines else 0.0
-    avg_ticket_per_match = (match_revenue / total_matches) if total_matches else 0.0
-
-    # Median days to convert (first mail date → job date) across matches
-    convert_deltas: List[int] = []
-    for m in matches:
-        first_mail_str = None
-        md = m.get("mail_dates_in_window", "") or ""
-        if md and md != "None provided":
-            first_mail_str = md.split(",")[0].strip()
-        job_date_str = m.get("crm_job_date")
-        d0 = _parse_mm_dd_yy(first_mail_str) if first_mail_str else None
-        d1 = _parse_mm_dd_yy(job_date_str) if job_date_str else None
-        if isinstance(d0, date) and isinstance(d1, date):
-            convert_deltas.append((d1 - d0).days)
-    median_days_to_convert = _median(convert_deltas)
-
-    # ----- Graph series -----
+    # 3) KPI metrics from matches
+    total_matches = len(match_rows)
+    match_revenue = 0.0
     matches_by_month: Dict[str, int] = defaultdict(int)
-    for m in matches:
-        d = _parse_mm_dd_yy(m.get("crm_job_date"))
-        ym = _ym_key(d)
+    convert_deltas: List[int] = []
+
+    for m in match_rows:
+        match_revenue += _safe_float(m.get("job_value", 0))
+        d_job = _to_date(m.get("crm_job_date"))
+        ym = _ym_key(d_job)
         if ym:
             matches_by_month[ym] += 1
 
+        d_mail = _to_date(m.get("last_mail_date"))
+        if not isinstance(d_mail, date):
+            md = m.get("mail_dates_in_window", "") or ""
+            first_mail_str = md.split(",")[0].strip() if (md and md != "None provided") else None
+            d_mail = _parse_mm_dd_yy(first_mail_str) if first_mail_str else None
+        if isinstance(d_mail, date) and isinstance(d_job, date):
+            convert_deltas.append((d_job - d_mail).days)
+
+    match_rate = (total_matches / unique_mail_addresses * 100.0) if unique_mail_addresses else 0.0
+    revenue_per_mailer   = (match_revenue / total_mail_lines) if total_mail_lines else 0.0
+    avg_ticket_per_match = (match_revenue / total_matches) if total_matches else 0.0
+    median_days_to_convert = _median(convert_deltas)
+
+    # 4) Graph series
     all_months = sorted(set(list(mail_by_month.keys()) + list(jobs_by_month.keys()) + list(matches_by_month.keys())))
     graph = {
         "months": all_months,
@@ -203,49 +202,28 @@ def build_payload(run_id: str) -> Dict[str, Any]:
         },
     }
 
-    # ----- Top cities & zips -----
+    # 5) Tops — from matches
     city_counts: Dict[str, int] = defaultdict(int)
     zip_counts: Dict[str, int]  = defaultdict(int)
-
-    for m in matches:
-        city_key = (m.get("city") or m.get("mail_city") or "").strip().lower()
+    for m in match_rows:
+        city_key = (m.get("crm_city") or "").strip().lower()
         if city_key:
             city_counts[city_key] += 1
-        z5 = str(m.get("zip") or m.get("mail_zip") or "").strip()[:5]
+        z5 = (m.get("zip5") or m.get("crm_zip") or "").strip()
         if z5:
-            zip_counts[z5] += 1
+            zip_counts[str(z5)[:5]] += 1
 
-    top_cities: List[Dict[str, Any]] = []
+    top_cities_rows: List[Dict[str, Any]] = []
     for city_key, cnt in sorted(city_counts.items(), key=lambda kv: kv[1], reverse=True):
         denom = max(1, unique_addr_by_city.get(city_key, 0))
         rate = (cnt / denom) * 100.0
-        top_cities.append({"city": city_key, "matches": int(cnt), "match_rate": round(rate, 2)})
+        top_cities_rows.append({"city": city_key, "matches": int(cnt), "match_rate": round(rate, 2)})
 
-    top_zips: List[Dict[str, Any]] = [
-        {"zip": z, "matches": int(cnt)}
-        for z, cnt in sorted(zip_counts.items(), key=lambda kv: kv[1], reverse=True)
-    ]
+    top_zips_rows: List[Dict[str, Any]] = [{"zip": z, "matches": int(cnt)}  # <-- 'zip' to match result_dao.save_all
+                                           for z, cnt in sorted(zip_counts.items(), key=lambda kv: kv[1], reverse=True)]
 
-    # ----- Summary table rows -----
-    summary_rows: List[Dict[str, Any]] = []
-    for r in matches:
-        summary_rows.append({
-            "mail_address1": r.get("matched_mail_full_address", ""),
-            "mail_unit": "",
-            "crm_address1": r.get("crm_address1_original", ""),
-            "crm_unit": r.get("crm_address2_original", ""),
-            "city": r.get("mail_city", "") or r.get("city", ""),
-            "state": r.get("mail_state", "") or r.get("state", ""),
-            "zip": (str(r.get("mail_zip", "") or r.get("zip", ""))[:5]),
-            "mail_dates": r.get("mail_dates_in_window", "None provided"),
-            "crm_date": r.get("crm_job_date", ""),
-            "amount": _safe_float(r.get("job_value", 0)),
-            "confidence": int(r.get("confidence_percent", 0)),
-            "notes": r.get("match_notes", ""),
-        })
-
-    # ----- Final payload -----
-    return {
+    # 6) Persist via result_dao (single place for stats IO)
+    payload = {
         "kpis": {
             "total_mail": total_mail_lines,
             "unique_mail_addresses": unique_mail_addresses,
@@ -255,11 +233,24 @@ def build_payload(run_id: str) -> Dict[str, Any]:
             "match_revenue": round(match_revenue, 2),
             "revenue_per_mailer": round(revenue_per_mailer, 2),
             "avg_ticket_per_match": round(avg_ticket_per_match, 2),
-            "median_days_to_convert": median_days_to_convert,
+            "median_days_to_convert": int(median_days_to_convert),
         },
         "graph": graph,
-        "top_cities": top_cities,
-        "top_zips": top_zips,
-        "summary": summary_rows,
+        "top_cities": top_cities_rows,
+        "top_zips": top_zips_rows,
         "run_id": run_id,
     }
+
+    _p("store", 98, "Persisting KPIs/series/tops")
+    result_dao.save_all(run_id, user_id, payload)
+
+    _p("finalize", 99, "Finalizing payload")
+    return payload
+
+
+# Backward-compatible entry point (pipeline calls this)
+def build_payload(
+    run_id: str,
+    on_progress: Optional[Callable[[str, Optional[int], Optional[str]], None]] = None,
+) -> Dict[str, Any]:
+    return build_and_store(run_id=run_id, user_id=None, on_progress=on_progress)

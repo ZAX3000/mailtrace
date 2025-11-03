@@ -164,41 +164,47 @@ def clear_normalized(run_id: str, source: str) -> None:
     db.session.execute(text(f"DELETE FROM {tbl} WHERE run_id = :rid"), {"rid": run_id})
     db.session.commit()
 
+def _extract_source_id(row: Dict[str, Any]) -> Any:
+    """
+    Normalize input id fields to a single 'source_id' value.
+    Priority: explicit 'source_id'
+    Coerce blank strings to None; leave non-blank strings as-is.
+    """
+    sid = row.get("source_id")
+
+    if isinstance(sid, str):
+        sid = sid.strip()
+        if sid == "":
+            sid = None
+    return sid
 
 def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]) -> int:
-    """
-    rows: list of dicts with keys:
-      id, address1, address2, city, state, zip, sent_date (ISO or date)
-    """
     if not rows:
         clear_normalized(run_id, "mail")
         return 0
 
     tbl = _tbl_norm("mail")
-
     stmt = text(f"""
         INSERT INTO {tbl}
-          (run_id, user_id, id, address1, address2, city, state, zip, sent_date)
+          (run_id, user_id, source_id, address1, address2, city, state, zip, sent_date)
         VALUES
-          (:rid, :uid, :id, :address1, :address2, :city, :state, :zip, :sent_date)
+          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :sent_date)
     """)
 
     payload = []
     for r in rows:
-        mid = r.get("id")
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "id": mid,  # keep None, never ""
-            "address1": (r.get("address1") or ""),
-            "address2": (r.get("address2") or ""),
-            "city": (r.get("city") or ""),
-            "state": (r.get("state") or ""),
-            "zip": (r.get("zip") or ""),
-            "sent_date": r.get("sent_date") or None,
+            "source_id": _extract_source_id(r),  # <-- always present key, may be None
+            "address1": (r.get("address1") or "").strip(),
+            "address2": (r.get("address2") or "").strip(),
+            "city": (r.get("city") or "").strip(),
+            "state": (r.get("state") or "").strip(),
+            "zip": (r.get("zip") or "").strip(),
+            "sent_date": (r.get("sent_date") or None),
         })
 
-    # Replace contents for this run
     clear_normalized(run_id, "mail")
     db.session.execute(stmt, payload)
     db.session.commit()
@@ -206,40 +212,34 @@ def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]
 
 
 def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]]) -> int:
-    """
-    rows: list of dicts with keys:
-      crm_id, address1, address2, city, state, zip, job_date, job_value
-    """
     if not rows:
         clear_normalized(run_id, "crm")
         return 0
 
     tbl = _tbl_norm("crm")
-
     stmt = text(f"""
         INSERT INTO {tbl}
-          (run_id, user_id, crm_id, address1, address2, city, state, zip, job_date, job_value)
+          (run_id, user_id, source_id, address1, address2, city, state, zip, job_date, job_value)
         VALUES
-          (:rid, :uid, :crm_id, :address1, :address2, :city, :state, :zip, :job_date, :job_value)
+          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :job_date, :job_value)
     """)
-
 
     payload = []
     for r in rows:
         job_val = r.get("job_value")
         if isinstance(job_val, str):
             job_val = job_val.strip() or None
-        cid = r.get("crm_id")
+
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "crm_id": cid,  # keep None, never ""
-            "address1": (r.get("address1") or ""),
-            "address2": (r.get("address2") or ""),
-            "city": (r.get("city") or ""),
-            "state": (r.get("state") or ""),
-            "zip": (r.get("zip") or ""),
-            "job_date": r.get("job_date") or None,
+            "source_id": _extract_source_id(r),  # <-- unified handling
+            "address1": (r.get("address1") or "").strip(),
+            "address2": (r.get("address2") or "").strip(),
+            "city": (r.get("city") or "").strip(),
+            "state": (r.get("state") or "").strip(),
+            "zip": (r.get("zip") or "").strip(),
+            "job_date": (r.get("job_date") or None),
             "job_value": job_val,
         })
 

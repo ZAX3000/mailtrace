@@ -73,11 +73,36 @@ config.set_main_option("sqlalchemy.url", db_url_str)
 logger.info("Alembic using URL: %s", config.get_main_option("sqlalchemy.url"))
 
 # ------------------------------------------------------------
-# Autogenerate filter: never diff Alembic's own version table
+# Autogenerate filters
 # ------------------------------------------------------------
+STAGING_PREFIXES = ("staging_", "stagingraw_", "staging_raw_")
+INCLUDE_STAGING = (os.getenv("ALEMBIC_INCLUDE_STAGING", "0").strip() == "1")
+
+def _is_staging_table_name(name: str | None) -> bool:
+    if not name:
+        return False
+    lname = name.lower()
+    return lname.startswith(STAGING_PREFIXES)
+
 def include_object(obj, name, type_, reflected, compare_to):
+    # 1) Never diff the Alembic housekeeping table
     if type_ == "table" and name == "alembic_version":
         return False
+
+    # 2) Optionally ignore staging tables and things attached to them
+    if not INCLUDE_STAGING:
+        # a) tables by name
+        if type_ == "table" and _is_staging_table_name(name):
+            return False
+
+        # b) indexes / constraints attached to a staging table
+        # obj may have .table for Index/Constraint types; be defensive.
+        parent_tbl = getattr(obj, "table", None)
+        parent_name = getattr(parent_tbl, "name", None)
+        if parent_name and _is_staging_table_name(parent_name):
+            return False
+
+    # otherwise, include it
     return True
 
 # ------------------------------------------------------------

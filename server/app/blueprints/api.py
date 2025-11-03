@@ -112,10 +112,20 @@ def run_status(run_id: UUID):
     return jsonify(pipeline.get_status(str(run_id))), 200
 
 
+from flask import jsonify
+from app.errors import NotFound, Conflict, Unauthorized
+
 @api_bp.get("/runs/<uuid:run_id>/result")
 def run_result(run_id: UUID):
     uid = _uid()
-    return jsonify(svc_get_result(str(run_id), uid)), 200
+    try:
+        return jsonify(svc_get_result(str(run_id), uid)), 200
+    except NotFound as e:
+        return jsonify({"error": str(e)}), 404
+    except Unauthorized as e:
+        return jsonify({"error": str(e)}), 403
+    except Conflict as e:
+        return jsonify({"error": str(e)}), 409
 
 
 # -----------------------

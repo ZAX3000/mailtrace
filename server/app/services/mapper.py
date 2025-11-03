@@ -12,7 +12,7 @@ REQUIRED_MAIL = {"address1", "city", "state", "zip", "sent_date"}
 REQUIRED_CRM  = {"address1", "city", "state", "zip", "job_date"}
 
 ALIAS_MAIL = {
-    "id": ["id", "mail_id", "record_id"],  # maps to source_id
+    "source_id": ["source_id", "source id", "id", "mail_id", "record_id"],
     "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
@@ -23,8 +23,7 @@ ALIAS_MAIL = {
         "postmark date", "mailing date", "outbound date"],
 }
 ALIAS_CRM = {
-    "crm_id": ["crm_id", "lead_id", "job_id", "id"],  # if CSV has "id", we treat as crm_id by default
-    "source_id": ["source_id", "source id", "external_id", "ext_id"],  # keep distinct from "id" to avoid collision
+    "source_id": ["source_id", "source id", "external_id", "ext_id", "crm_id", "lead_id", "job_id", "id"],
     "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
@@ -34,7 +33,7 @@ ALIAS_CRM = {
     "job_value": ["job_value", "amount", "value", "revenue", "job value"],
 }
 
-def _canon_for(source: str):
+def canon_for(source: str):
     if source == "mail":
         return REQUIRED_MAIL, ALIAS_MAIL
     return REQUIRED_CRM, ALIAS_CRM
@@ -45,7 +44,7 @@ def _first_present(row: dict, names: List[str]) -> Optional[str]:
             return row[n]
     return None
 
-def _apply_mapping(rows: List[dict], mapping: Dict[str, str], alias: Dict[str, List[str]]) -> List[dict]:
+def apply_mapping(rows: List[dict], mapping: Dict[str, str], alias: Dict[str, List[str]]) -> List[dict]:
     """Rename columns to canonical keys using explicit mapping first, then alias fallbacks."""
     out: List[dict] = []
     for r in rows:
@@ -71,12 +70,6 @@ def _csv_to_rows(file_stream, encoding: str = "utf-8") -> List[dict]:
     f = io.StringIO(data)
     reader = csv.DictReader(f)
     return [dict(row) for row in reader]
-
-def _missing_required(normalized_rows: List[dict], required: Set[str]) -> Set[str]:
-    if not normalized_rows:
-        return set(required)
-    present = {k for k, v in normalized_rows[0].items() if v is not None}
-    return set(k for k in required if all((row.get(k) in (None, "")) for row in normalized_rows))
 
 def ingest_raw_file(
     run_id: str,
@@ -122,7 +115,7 @@ def get_mapping(run_id: str, source: str) -> Dict[str, Any]:
     return mapper_dao.get_mapping(run_id, source)
 
 def save_mapping(run_id: str, user_id: str, source: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    required, alias = _canon_for(source)
+    required, alias = canon_for(source)
     mapper_dao.save_mapping(run_id, user_id, source, mapping)
     hdrs = mapper_dao.get_raw_headers(run_id, source, sample=1)  # cheap existence check
     return {"ok": True, "run_id": run_id, "source": source, "mapping_saved": True}

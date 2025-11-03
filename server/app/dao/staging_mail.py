@@ -26,7 +26,7 @@ CANON_COLS = [
 REQUIRED: set[str] = {"address1", "city", "state", "zip", "sent_date"}
 
 ALIASES: Dict[str, List[str]] = {
-    "id": ["id", "mail_id", "record_id"],  # maps to source_id
+    "source_id": ["id", "mail_id", "record_id"],  # maps to source_id
     "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
@@ -260,7 +260,7 @@ def copy_mail_csv_path(
     mapping: Optional[Dict[str, Any]] = None,
 ) -> int:
     """
-    Ingest CSV directly into staging.mail with dedupe via partial unique indexes.
+    Ingest CSV directly into staging_mail with dedupe via partial unique indexes.
     No temp tables/files. In-memory aliasing + batched INSERTs.
 
     - `run_id` is required and stored.
@@ -336,7 +336,7 @@ def copy_mail_csv_path(
                     "address2": (get_val(row, "address2") or None),
                     "city": get_val(row, "city"),
                     "state": get_val(row, "state"),
-                    "zip": get_val(row, "postal_code"),
+                    "zip": get_val(row, "zip"),
                     "sent_date": sent_date_iso,
                 }
             )

@@ -52,7 +52,7 @@ export function useRun() {
         if (status === 'failed' || step === 'failed') {
           throw new Error(s.message || 'Matching failed')
         }
-        if (status === 'done' || status === 'completed' || step === 'done' || s.pct === 100) {
+        if (status === 'done' || step === 'done' || s.pct === 100) {
           break
         }
 

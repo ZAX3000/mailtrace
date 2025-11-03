@@ -5,7 +5,7 @@ export type StartRunResponse =
   | { kind: 'error'; status?: number; message?: string }
 
 export type RunStatus = {
-  status?: 'queued' | 'running' | 'done' | 'completed' | 'failed'
+  status?: 'queued' | 'running' | 'done' | 'failed'
   step?: string
   message?: string
   pct?: number

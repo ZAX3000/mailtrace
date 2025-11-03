@@ -36,11 +36,6 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
-      '/dashboard_export': {
-        target: FLASK,
-        changeOrigin: true,
-        secure: false,
-      },
     },
   },
   build: {

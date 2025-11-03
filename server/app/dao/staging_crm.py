@@ -16,7 +16,6 @@ TABLE = f"{SCHEMA}.crm"
 # Insert columns, in order
 CANON_COLS = [
     "run_id",      # NEW (NOT NULL)
-    "crm_id",      # optional
     "source_id",   # NEW (optional)
     "address1",
     "address2",
@@ -27,12 +26,11 @@ CANON_COLS = [
     "job_value",
 ]
 
-# Required AFTER aliasing (crm_id/source_id are optional)
+# Required AFTER aliasing (source_id are optional)
 REQUIRED: set[str] = {"address1", "city", "state", "zip", "job_date"}
 
 ALIASES: Dict[str, List[str]] = {
-    "crm_id": ["crm_id", "lead_id", "job_id", "id"],  # if CSV has "id", we treat as crm_id by default
-    "source_id": ["source_id", "source id", "external_id", "ext_id"],  # keep distinct from "id" to avoid collision
+    "source_id": ["source_id", "source id", "external_id", "ext_id", "crm_id", "lead_id", "job_id", "id"],  # keep distinct from "id" to avoid collision
     "address1": ["address1", "addr1", "address 1", "address", "street", "line1", "line 1"],
     "address2": ["address2", "addr2", "address 2", "unit", "line2", "apt", "apartment", "suite", "line 2"],
     "city": ["city", "town"],
@@ -77,7 +75,6 @@ def ensure_staging_crm(engine: Engine) -> None:
                 f"""
                 CREATE TABLE IF NOT EXISTS {TABLE} (
                     run_id      UUID NOT NULL,
-                    crm_id      TEXT NULL,
                     source_id   TEXT NULL,
                     address1    TEXT NOT NULL,
                     address2    TEXT NULL,
@@ -295,11 +292,11 @@ def copy_crm_csv_path(
     mapping: Optional[Dict[str, Any]] = None,
 ) -> int:
     """
-    Ingest CSV directly into staging.crm with dedupe via partial unique indexes.
+    Ingest CSV directly into staging_crm with dedupe via partial unique indexes.
     No temp tables/files. In-memory aliasing + batched INSERTs.
 
     `mapping` (optional): dict of canonical_name -> original_header
-       canonical in: crm_id, source_id, address1, address2, city, state, zip, job_date, job_value
+       canonical in: source_id, address1, address2, city, state, zip, job_date, job_value
     """
     assert_postgres(engine)
     ensure_staging_crm(engine)
@@ -365,13 +362,12 @@ def copy_crm_csv_path(
             batch.append(
                 {
                     "run_id": run_id,
-                    "crm_id": get_val(row, "crm_id") or None,
                     "source_id": get_val(row, "source_id") or None,
                     "address1": get_val(row, "address1"),
                     "address2": get_val(row, "address2") or None,
                     "city": get_val(row, "city"),
                     "state": get_val(row, "state"),
-                    "zip": get_val(row, "postal_code"),
+                    "zip": get_val(row, "zip"),
                     "job_date": job_date_iso,
                     "job_value": job_value_val,
                 }
