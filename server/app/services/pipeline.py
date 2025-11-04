@@ -4,10 +4,10 @@ from __future__ import annotations
 import logging
 import time
 from threading import Thread, Event, current_thread
-from typing import Dict, Any, List, Set, Optional, Callable
+from typing import Dict, Any, List, Set, Optional, Callable, Tuple, cast
 from datetime import date, datetime
-
-from flask import current_app, has_app_context
+from flask import current_app
+from flask import Flask, has_app_context
 
 from app.dao import run_dao, staging_dao, mapper_dao
 from app.services import summary
@@ -38,7 +38,12 @@ def _count_with_optional_user(fn: Callable, run_id: str, user_id: Optional[str])
     except TypeError:
         return int(fn(run_id))
 
-def _fetch_with_user(fn: Callable, run_id: str, user_id: Optional[str], limit: Optional[int] = None):
+def _fetch_with_user(
+    fn: Callable[..., Any],
+    run_id: str,
+    user_id: Optional[str],
+    limit: Optional[int] = None,
+) -> Any:
     try:
         if limit is None:
             return fn(run_id, user_id)
@@ -148,7 +153,7 @@ def start_matching(run_id: str) -> None:
     run_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
     log.info("start_matching: claimed run_id=%s; spawning matcher thread", run_id)
 
-    app = current_app._get_current_object()
+    app = cast(Flask, current_app._get_current_object())
     t = Thread(
         target=_match_and_aggregate_async,
         args=(app, run_id),
@@ -220,14 +225,14 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                  f"Check your CSV and mapping. {hint}").strip()
         )
 
-    def _none_if_empty(v):
+    def _none_if_empty(v: Any) -> Any:
         if v is None: 
             return None
         if isinstance(v, str) and v.strip() == "": 
             return None
         return v
 
-    def _to_str_or_none(v):
+    def _to_str_or_none(v: Any) -> Optional[str]:
         v = _none_if_empty(v)
         return None if v is None else str(v).strip()
 
@@ -267,7 +272,7 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
 
 # -------- Internal worker --------
 
-def _match_and_aggregate_async(app, run_id: str) -> None:
+def _match_and_aggregate_async(app: Flask, run_id: str) -> None:
     with app.app_context():
         stop = Event()
 
@@ -287,7 +292,8 @@ def _match_and_aggregate_async(app, run_id: str) -> None:
             _tick(run_id, "load", pct=91, msg="Loading normalized rows")
 
             run_meta = run_dao.status(run_id) or {}
-            user_id: Optional[str] = run_meta.get("user_id") or run_dao.get_user_id(run_id)
+            user_id_opt: Optional[str] = run_meta.get("user_id") or run_dao.get_user_id(run_id)
+            user_id: str = str(user_id_opt or "")
 
             try:
                 mail_n = _count_with_optional_user(

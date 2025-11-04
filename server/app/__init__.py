@@ -5,7 +5,7 @@ import os
 import logging
 import uuid
 from contextvars import ContextVar
-from typing import Optional
+from typing import Optional, TYPE_CHECKING, Any
 
 from flask import Flask, send_from_directory, session, request, g
 from dotenv import load_dotenv
@@ -15,15 +15,18 @@ from .extensions import db, migrate
 from .typing_ext import MailTraceFlask
 from .errors import register_error_handlers
 
-# Optional: enable CORS in dev if client runs on another port
+if TYPE_CHECKING:
+    CORS: Any
+
 try:
-    from flask_cors import CORS  # type: ignore
-except Exception:  # pragma: no cover
-    CORS = None  # type: ignore
+    import importlib
+    _mod = importlib.import_module("flask_cors")
+    CORS = getattr(_mod, "CORS", None)
+except Exception:
+    CORS = None
 
 load_dotenv()
 
-# ---- request-id context (used by logs and response headers)
 _request_id: ContextVar[Optional[str]] = ContextVar("request_id", default=None)
 
 
@@ -48,39 +51,6 @@ def create_app() -> Flask:
     # ---- Dev CORS (only if module present and we’re in dev)
     if app.config.get("ENV") != "production" and CORS:
         CORS(app, supports_credentials=True)
-
-    # --- Dev autologin (remove once real Auth0 is live) ---
-    if app.config.get("DISABLE_AUTH"):
-        @app.before_request
-        def _dev_autologin():
-            if "user_id" in session:
-                return
-            # Only auto-login local requests
-            if request.remote_addr in {"127.0.0.1", "::1"}:
-                from app.blueprints.auth import _ensure_dev_user
-                u = _ensure_dev_user()
-                session["user_id"] = str(u.id)      # real UUID from DB
-                session["email"] = u.email
-
-    # ---- Request/Response hooks (request-id + small diagnostics)
-    @app.before_request
-    def _before_request():
-        # Adopt incoming request-id or create a new one
-        rid = request.headers.get("X-Request-ID") or str(uuid.uuid4())
-        _request_id.set(rid)
-        g.request_id = rid
-        # Minimal trace
-        app.logger.debug("→ %s %s rid=%s", request.method, request.path, rid)
-
-    @app.after_request
-    def _after_request(resp):
-        rid = _request_id.get()
-        if rid:
-            resp.headers["X-Request-ID"] = rid
-        # Mirror a compact status line for quick tailing
-        app.logger.debug("← %s %s %s rid=%s",
-                         request.method, request.path, resp.status_code, rid or "-")
-        return resp
 
     # ---- Storage (lazy import to avoid heavy deps at import time)
     from .services.storage import LocalStorage

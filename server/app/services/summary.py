@@ -1,7 +1,7 @@
 # app/services/summary.py
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable, List, Tuple, Optional, Callable
+from typing import Any, Dict, Iterable, List, Tuple, Optional, Callable, TypedDict
 from collections import defaultdict
 from datetime import date, datetime
 
@@ -107,7 +107,12 @@ def _compute_job_uniques(
 
     return len(seen_jobs), dict(jobs_by_month)
 
-def _yoy_overlay(series_by_month: Dict[str, int]) -> Dict[str, List[int]]:
+class YoYOverlay(TypedDict):
+    months: List[str]
+    current: List[int]
+    prev: List[int]
+
+def _yoy_overlay(series_by_month: Dict[str, int]) -> YoYOverlay:
     if not series_by_month:
         return {"months": [], "current": [], "prev": []}
     years = sorted({int(k.split("-")[0]) for k in series_by_month.keys()})

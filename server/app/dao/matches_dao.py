@@ -1,9 +1,10 @@
 # app/dao/matches_dao.py
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Any
+from typing import Dict, Iterable, List, Optional, Any, cast
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.engine import CursorResult
 
 from app import db
 
@@ -35,7 +36,8 @@ def delete_for_run(run_id: str, user_id: str) -> int:
     # In SQLAlchemy 2.x, rowcount may be -1 depending on driver; still commit.
     db.session.commit()
     try:
-        return int(res.rowcount or 0)
+        cr = cast(CursorResult[Any], res)
+        return int(getattr(cr, "rowcount", 0) or 0)
     except Exception:
         return 0
 

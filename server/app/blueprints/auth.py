@@ -145,27 +145,6 @@ def _ensure_dev_user() -> User:
         db.session.commit()
     return user
 
-def _dev_autologin_if_configured() -> None:
-    """
-    In dev (DISABLE_AUTH=1), ensure session has a valid user.
-    No-op in prod.
-    """
-    if not current_app.config.get("DISABLE_AUTH"):
-        return
-    if "user_id" in session:
-        return
-    # Only trust local access for the silent autologin behavior
-    if request.remote_addr in {"127.0.0.1", "::1"}:
-        u = _ensure_dev_user()
-        session["user_id"] = str(u.id)
-        session["email"] = u.email
-
-# Run for every request (blueprint-scoped, applies app-wide)
-@auth_bp.before_app_request
-def _attach_user_and_dev_autologin():
-    _dev_autologin_if_configured()
-    # (Optionally expose on g if you prefer; session is sufficient for now.)
-
 # ------------------------
 # Decorators
 # ------------------------

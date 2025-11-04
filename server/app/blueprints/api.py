@@ -72,8 +72,8 @@ def upload_raw(run_id: UUID, source: str):
         raise BadRequest("missing file")
 
     # Parse CSV and store RAW rows (JSONB) only
-    payload: Dict[str, Any] = svc_ingest_raw_file(
-        str(run_id), uid, source, f.stream, filename=f.filename
+    _fname, payload = svc_ingest_raw_file(
+        str(run_id), uid, source, f.stream, filename=f.filename or ""
     )
     return jsonify(payload), 201
 
@@ -84,7 +84,8 @@ def save_mapping(run_id: UUID):
     body = request.get_json(force=True) or {}
     source = _norm_source(body.get("source") or "mail")
     mapping = body.get("mapping") or {}
-    out = svc_save_mapping(str(run_id), source, mapping)
+    from json import dumps
+    out = svc_save_mapping(str(run_id), source, dumps(mapping))
     return jsonify(out), 200
 
 
