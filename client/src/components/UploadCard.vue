@@ -90,7 +90,6 @@ async function onPick(source: Source) {
     const res = await uploadSource(runId.value, source, file)
     log.info('UI ▶ upload done', { source, res })
 
-    // RAW-only upload → nudge mapper immediately
     if (res.state === 'raw_only') {
       window.dispatchEvent(
         new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, source } })
@@ -120,7 +119,6 @@ async function onRun(ev?: Event) {
   const hasMail = !!mailInput.value?.files?.[0]
   const hasCrm  = !!crmInput.value?.files?.[0]
   if (!hasMail || !hasCrm) {
-    // Let Dashboard open its guard modal
     emit('need-both-files')
     return
   }
@@ -128,7 +126,6 @@ async function onRun(ev?: Event) {
   await ensureRun()
   log.info('UI ▶ Run clicked', { runId: runId.value })
 
-  // Delegate to the composable (it shows the loader, polls, and logs ticks)
   await kickOffAndPoll(runId.value, (missing) => {
     log.warn('UI ▶ needs mapping (409)', { runId: runId.value, missing })
     emit('mapping-required', missing)

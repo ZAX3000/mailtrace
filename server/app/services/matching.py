@@ -1,4 +1,3 @@
-# app/services/matching.py
 from __future__ import annotations
 
 import json
@@ -25,9 +24,8 @@ try:
 except (TypeError, ValueError):
     pass
 
-# Optional speed knobs (can be toggled by env; safe defaults)
 FAST_FILTERS = (os.getenv("FAST_FILTERS", "1").strip() != "0")
-LIMIT_TOPK   = int((os.getenv("TOPK_RECHECK") or "1").strip())  # recheck top-K after bonuses
+LIMIT_TOPK   = int((os.getenv("TOPK_RECHECK") or "1").strip())
 
 # --- Address normalization helpers ---
 STREET_TYPES: Dict[str, str] = {
@@ -103,30 +101,6 @@ def directional_in(tok_list: List[str]) -> Optional[str]:
             return t
     return None
 
-DATE_FORMATS: Tuple[str, ...] = (
-    "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y",
-    "%Y/%m/%d", "%m/%d/%y", "%d-%m-%y",
-)
-
-def parse_date_any(s: Any) -> Optional[date]:
-    if not isinstance(s, str) or not s.strip():
-        return None
-    z = s.strip().replace("/", "-")
-    for fmt in DATE_FORMATS:
-        try:
-            return datetime.strptime(z, fmt).date()
-        except ValueError:
-            continue
-    # last-resort: try ISO with time
-    try:
-        return datetime.fromisoformat(s.strip().replace("Z", "+00:00")).date()
-    except Exception:
-        return None
-
-def fmt_mm_dd_yy(d: Optional[date]) -> str:
-    return d.strftime("%m-%d-%y") if isinstance(d, date) else "None provided"
-
-# --- RapidFuzz scoring (token-set is robust to order/dups) ---
 def _ratio(a: str, b: str) -> float:
     return fuzz.token_set_ratio(_mt_clean(a), _mt_clean(b)) / 100.0
 
@@ -152,7 +126,7 @@ MAIL_CANON_MAP: Dict[str, List[str]] = {
 }
 
 CRM_CANON_MAP: Dict[str, List[str]] = {
-    "line_no": ["line_no"], 
+    "line_no": ["line_no"],
     "source_id": ["crm_id", "id", "lead_id", "job_id"],
     "address1": ["address1", "addr1", "address", "street", "line1"],
     "address2": ["address2", "addr2", "unit", "line2"],
@@ -184,7 +158,7 @@ def _prep_mail_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for r in rows:
         c = _canonize_row(r, MAIL_CANON_MAP)
         c["_blk"]       = block_key(c.get("address1", ""))
-        c["_date"]      = parse_date_any(c.get("sent_date", ""))
+        c["_date"]      = c.get("sent_date", "")
         c["_addr_norm"] = normalize_address1(str(c.get("address1", "")))
         c["_addr_str"]  = c["_addr_norm"]  # string fed to RapidFuzz
         c["_zip5"]      = str(c.get("zip", "")).strip()[:5]
@@ -198,7 +172,7 @@ def _prep_crm_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     for r in rows:
         c = _canonize_row(r, CRM_CANON_MAP)
         c["_blk"]       = block_key(c.get("address1", ""))
-        c["_date"]      = parse_date_any(c.get("job_date", ""))
+        c["_date"]      = c.get("job_date", "")
         c["_addr_norm"] = normalize_address1(str(c.get("address1", "")))
         c["_addr_str"]  = c["_addr_norm"]
         c["_zip5"]      = str(c.get("zip", "")).strip()[:5]
@@ -213,11 +187,10 @@ def _prep_crm_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
 
 def _bonus_adjust(score_base: int, mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> int:
     score = score_base
-    # +ZIP5 bonus
+
     mz, cz = mail_row.get("_zip5", ""), crm_row.get("_zip5", "")
     if mz and cz and mz == cz:
         score = min(100, score + 5)
-    # +city/state bonuses
     if mail_row.get("_city_l") and crm_row.get("_city_l") and mail_row["_city_l"] == crm_row["_city_l"]:
         score = min(100, score + 2)
     if mail_row.get("_state_l") and crm_row.get("_state_l") and mail_row["_state_l"] == crm_row["_state_l"]:
@@ -251,37 +224,24 @@ def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> List[str]:
 # Main API (RapidFuzz bulk)
 # -----------------------
 
-# Collect “skipped” rows for optional artifact
 excluded_rows_collect: List[Dict[str, Any]] = []
 
 def _tight_block_key(base_blk: str, zip5: str) -> Tuple[str, str]:
-    """Optional second-level block that includes ZIP5 when present."""
     return (base_blk or ""), (zip5 or "")
 
 def run_matching(
     mail_rows: Iterable[Dict[str, Any]],
     crm_rows:  Iterable[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """
-    Pure-Python matcher accelerated with RapidFuzz:
-      - Canonicalizes rows
-      - Groups MAIL by base block key (and zip5 secondary index)
-      - For each CRM row, prefilters by date window (+ optional city/state/zip checks)
-      - Uses RapidFuzz process.extract / extractOne to pick best candidate in C++
-      - Tie-break by earliest mail date
-      - Emits list of dicts for summary/dashboard
-    """
     excluded_rows_collect.clear()
 
     mail = _prep_mail_rows(mail_rows)
     crm  = _prep_crm_rows(crm_rows)
 
-    # Group mail by base block
     mail_groups: Dict[str, List[Dict[str, Any]]] = {}
     for m in mail:
         mail_groups.setdefault(m["_blk"], []).append(m)
 
-    # Secondary zip5 index per block (optional)
     mail_groups_zip: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
     if FAST_FILTERS:
         for blk, lst in mail_groups.items():
@@ -294,12 +254,10 @@ def run_matching(
     for c in crm:
         blk = c["_blk"]
 
-        # Pull candidates by block (and zip if available under FAST_FILTERS)
         candidates: Optional[List[Dict[str, Any]]] = None
         if FAST_FILTERS and c.get("_zip5"):
             candidates = mail_groups_zip.get(_tight_block_key(blk, c["_zip5"]))
             if not candidates:
-                # Fallback to all in block if zip-narrowing was empty
                 candidates = mail_groups.get(blk)
         else:
             candidates = mail_groups.get(blk)
@@ -314,7 +272,6 @@ def run_matching(
             })
             continue
 
-        # Date window: only mail with no date or <= crm date
         cand = candidates
         if c["_date"]:
             dt = c["_date"]
@@ -329,7 +286,6 @@ def run_matching(
                 })
                 continue
 
-        # Extra cheap prefilters (toggleable)
         if FAST_FILTERS:
             cz, cc, cs = c.get("_zip5", ""), c.get("_city_l", ""), c.get("_state_l", "")
             cand_fast: List[Dict[str, Any]] = []
@@ -345,7 +301,6 @@ def run_matching(
             if cand_fast:
                 cand = cand_fast
 
-        # RapidFuzz bulk scoring to get top candidate(s)
         addr_query = c["_addr_str"]
         cand_strings = [m["_addr_str"] for m in cand]
 
@@ -357,26 +312,22 @@ def run_matching(
             continue
 
         if LIMIT_TOPK <= 1:
-            # Fast path: single best
             matched = process.extractOne(
                 addr_query, cand_strings, scorer=fuzz.token_set_ratio, score_cutoff=0
             )
             if matched:
                 _, base_score, idx = matched
                 m = cand[idx]
-                # Apply bonuses
                 adj = _bonus_adjust(int(base_score), m, c)
                 best, best_score = m, adj
                 best_notes = _notes_for(m, c)
         else:
-            # Top-K path (if bonuses can re-order ties)
             topk = process.extract(
                 addr_query, cand_strings, scorer=fuzz.token_set_ratio, limit=LIMIT_TOPK, score_cutoff=0
             )
             for _, base_score, idx in topk:
                 m = cand[idx]
                 adj = _bonus_adjust(int(base_score), m, c)
-                # tie-break by earliest mail date
                 m_date_cmp: date = m["_date"] if isinstance(m.get("_date"), date) else date.min
                 best_date_cmp: date = best["_date"] if (best and isinstance(best.get("_date"), date)) else date.max
                 if adj > best_score or (adj == best_score and m_date_cmp < best_date_cmp):
@@ -384,9 +335,8 @@ def run_matching(
             if best:
                 best_notes = _notes_for(best, c)
 
-        # collect prior mail dates (sorted) for UI
         prior_dates: List[date] = sorted([d for d in (m.get("_date") for m in cand) if isinstance(d, date)])
-        mail_dates_list = ", ".join(fmt_mm_dd_yy(d) for d in prior_dates) if prior_dates else "None provided"
+        last_mail_dt = max(prior_dates) if prior_dates else None
 
         if not best:
             continue
@@ -415,14 +365,19 @@ def run_matching(
             "crm_city": c.get("city", ""),
             "crm_state": c.get("state", ""),
             "crm_zip": str(c.get("zip", "")),
-            "crm_job_date": c.get("job_date"),
+
+            "crm_job_date": c.get("_date"),
+            "last_mail_date": last_mail_dt,
+
             "job_value": c.get("job_value", ""),
+
             "mail_id": best.get("source_id", ""),
             "mail_line_no": best.get("line_no", ""),
             "mail_full_address": full_mail.replace(" None", "").replace(" none", ""),
             "crm_full_address": full_crm.replace(" None", "").replace(" none", ""),
-            "mail_dates_in_window": mail_dates_list,
+
             "mail_count_in_window": len(prior_dates),
+
             "confidence_percent": int(best_score),
             "match_notes": ("; ".join(best_notes) if best_notes else "perfect match"),
         }
@@ -453,53 +408,16 @@ def persist_matches_for_run(
     mail_rows: Iterable[Dict[str, Any]],
     crm_rows:  Iterable[Dict[str, Any]],
 ) -> int:
-    """
-    Runs matching, transforms dicts for DB schema, persists to `matches`.
-    Returns number of rows inserted.
-    """
     raw_rows = run_matching(mail_rows, crm_rows)
 
     transformed: List[Dict[str, Any]] = []
     for r in raw_rows:
-        # Convert crm_job_date (string) to date
-        crm_job_date_py = _parse_mm_dd_yy(r.get("crm_job_date"))
-
-        # last_mail_date = max(parsed window dates)
-        last_mail_py = None
-        md = (r.get("mail_dates_in_window") or "").strip()
-        if md and md != "None provided":
-            parts = [p.strip() for p in md.split(",") if p.strip()]
-            parsed = [_parse_mm_dd_yy(p) for p in parts]
-            parsed = [d for d in parsed if isinstance(d, date)]
-            last_mail_py = max(parsed) if parsed else None
-
         transformed.append({
             **r,
-            "_crm_job_date_py": crm_job_date_py,
-            "_last_mail_date_py": last_mail_py,
-            # denormalized helpers (zip5/state) for indexes
             "zip5": str(r.get("crm_zip") or "")[:5],
             "state": str(r.get("crm_state") or "")[:2],
         })
 
-    # Upsert strategy: clear previous run rows, then bulk-insert - consider changing later to accumulate matches across runs
-    # Also, we need to avoid duplicates over all (run_id, user_id) - is this a truly unique match?
     matches_dao.delete_for_run(run_id, user_id)
     inserted = matches_dao.bulk_insert(run_id, user_id, transformed)
     return inserted
-
-
-# -----------------------
-# Local helper (avoid circular import)
-# -----------------------
-
-def _parse_mm_dd_yy(s: Any) -> Optional[date]:
-    if not isinstance(s, str) or not s.strip():
-        return None
-    try:
-        parts = s.strip().split("-")
-        if len(parts) == 3 and len(parts[2]) == 2:
-            return datetime.strptime(s.strip(), "%m-%d-%y").date()
-        return datetime.strptime(s.strip(), "%m-%d-%Y").date()
-    except Exception:
-        return None

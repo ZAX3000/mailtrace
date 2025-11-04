@@ -5,6 +5,7 @@ import logging
 import time
 from threading import Thread, Event, current_thread
 from typing import Dict, Any, List, Set, Optional, Callable
+from datetime import date, datetime
 
 from flask import current_app, has_app_context
 
@@ -65,6 +66,28 @@ def _tick(run_id: str, substep: str, *, pct: int | None = None, msg: str | None 
     m = f"[{substep}] {msg or ''}".strip()
     log.debug("tick run_id=%s ctx=%s pct=%s %s", run_id, has_app_context(), pct, m)
     run_dao.update_step(run_id, step="matching", pct=pct, message=m)
+
+_DATE_FORMATS = (
+    "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y",
+    "%Y/%m/%d", "%m/%d/%y", "%d-%m-%y",
+)
+
+def to_date_or_none(v: Any) -> Optional[date]:
+    if isinstance(v, date):
+        return v
+    if not isinstance(v, str) or not v.strip():
+        return None
+    s = v.strip().replace("/", "-")
+    for fmt in _DATE_FORMATS:
+        try:
+            return datetime.strptime(s, fmt).date()
+        except ValueError:
+            pass
+    try:
+        # tolerate ISO with time / trailing Z
+        return datetime.fromisoformat(v.strip().replace("Z", "+00:00")).date()
+    except Exception:
+        return None
 
 # -------- Public API (controllers call only these) --------
 
@@ -207,6 +230,8 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
         return None if v is None else str(v).strip()
 
     if source == "mail":
+        for r in normalized:
+            r["sent_date"] = to_date_or_none(r.get("sent_date"))
         rows_for_db = [dict(r, source_id=_to_str_or_none(r.get("id"))) for r in normalized]
 
         _set(run_id, "mail_inserting")
@@ -220,7 +245,9 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
 
         _set(run_id, "mail_ready")
 
-    else:
+    else:  # source == "crm"
+        for r in normalized:
+            r["job_date"] = to_date_or_none(r.get("job_date") or r.get("date") or r.get("created_at"))
         rows_for_db = [dict(r, source_id=_to_str_or_none(r.get("source_id") or r.get("id"))) for r in normalized]
 
         _set(run_id, "crm_inserting")

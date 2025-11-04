@@ -69,10 +69,9 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
         r.setdefault("job_value", None)
         r.setdefault("mail_full_address", "")
         r.setdefault("crm_full_address", "")
-        r.setdefault("mail_dates_in_window", "")
         r.setdefault("mail_count_in_window", 0)
-        r.setdefault("_crm_job_date_py", None)
-        r.setdefault("_last_mail_date_py", None)
+        r.setdefault("crm_job_date", None)
+        r.setdefault("last_mail_date", None)
         r.setdefault("confidence_percent", 0)
         r.setdefault("match_notes", "")
         r.setdefault("zip5", "")
@@ -98,7 +97,6 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
 
             mail_full_address,
             crm_full_address,
-            mail_dates_in_window,
             mail_count_in_window,
 
             confidence_percent,
@@ -116,8 +114,8 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
             :crm_id,
             :mail_id,
 
-            :_crm_job_date_py,
-            :_last_mail_date_py,
+            :crm_job_date,
+            :last_mail_date,
             :job_value,
 
             :crm_city,
@@ -126,7 +124,6 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
 
             :crm_full_address,
             :mail_full_address,
-            :mail_dates_in_window,
             :mail_count_in_window,
 
             :confidence_percent,
@@ -171,7 +168,6 @@ def fetch_for_run(run_id: str, user_id: Optional[str] = None) -> List[Dict]:
             crm_zip,
             crm_full_address,
             mail_full_address,
-            mail_dates_in_window,
             mail_count_in_window,
             confidence_percent,
             match_notes,

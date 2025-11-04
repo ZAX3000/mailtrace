@@ -162,7 +162,6 @@ class Match(db.Model):
     # Mail context (winner + window)
     mail_full_address     = db.Column(sa.Text)
     crm_full_address      = db.Column(sa.Text)
-    mail_dates_in_window  = db.Column(sa.Text)
     mail_count_in_window  = db.Column(sa.Integer)
     last_mail_date        = db.Column(sa.Date)
 

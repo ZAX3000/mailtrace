@@ -6,7 +6,7 @@ from collections import defaultdict
 from datetime import date, datetime
 
 from app.dao import staging_dao, matches_dao, result_dao
-from app.services.matching import normalize_address1, parse_date_any
+from app.services.matching import normalize_address1
 
 # ---------- small helpers ----------
 
@@ -50,20 +50,6 @@ def _parse_mm_dd_yy(s: Any) -> date | None:
     except Exception:
         return None
 
-def _to_date(v: Any) -> Optional[date]:
-    if isinstance(v, date):
-        return v
-    if isinstance(v, str):
-        try:
-            return datetime.fromisoformat(v).date()
-        except Exception:
-            pass
-        d = parse_date_any(v)
-        if d:
-            return d
-        return _parse_mm_dd_yy(v)
-    return None
-
 # ---------- KPI & series helpers (from staging) ----------
 
 def _compute_mail_uniques(
@@ -79,7 +65,7 @@ def _compute_mail_uniques(
         city  = r.get("city", "")
         state = r.get("state", "")
         zipc  = r.get("zip", "")
-        d     = parse_date_any(r.get("sent_date"))
+        d     = r.get("sent_date")  # already a date
 
         line_key = _addr_date_key(addr1, city, state, zipc, d)
         if line_key not in seen_mail_line:
@@ -110,7 +96,7 @@ def _compute_job_uniques(
         city  = r.get("city", "")
         state = r.get("state", "")
         zipc  = r.get("zip", "")
-        d     = parse_date_any(r.get("job_date"))
+        d     = r.get("job_date")
 
         key = _addr_date_key(addr1, city, state, zipc, d)
         if key not in seen_jobs:
@@ -170,16 +156,12 @@ def build_and_store(
 
     for m in match_rows:
         match_revenue += _safe_float(m.get("job_value", 0))
-        d_job = _to_date(m.get("crm_job_date"))
+        d_job = m.get("crm_job_date")
         ym = _ym_key(d_job)
         if ym:
             matches_by_month[ym] += 1
 
-        d_mail = _to_date(m.get("last_mail_date"))
-        if not isinstance(d_mail, date):
-            md = m.get("mail_dates_in_window", "") or ""
-            first_mail_str = md.split(",")[0].strip() if (md and md != "None provided") else None
-            d_mail = _parse_mm_dd_yy(first_mail_str) if first_mail_str else None
+        d_mail = m.get("last_mail_date")
         if isinstance(d_mail, date) and isinstance(d_job, date):
             convert_deltas.append((d_job - d_mail).days)
 
