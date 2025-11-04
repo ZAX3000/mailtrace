@@ -9,7 +9,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     env:
-      PYTHONPATH: ${{ github.workspace }}
+      PYTHONPATH: ${{ github.workspace }}/server
       DATABASE_URL: postgresql+psycopg://mailtrace:devpass@localhost:5432/mailtrace
       FLASK_ENV: testing
       DISABLE_AUTH: "1"
@@ -40,12 +40,13 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install -U pip
-          pip install -r requirements.txt
+          pip install -r server/requirements.txt
           pip install pytest ruff black mypy alembic psycopg[binary] pandas-stubs types-requests
 
       - name: DB migrate
+        working-directory: server
         run: |
-          # Small buffer after healthcheck just to be safe
+          # Tiny buffer after healthcheck
           sleep 3
           alembic upgrade head
 
@@ -54,7 +55,9 @@ jobs:
         continue-on-error: true
 
       - name: Type check
+        working-directory: server
         run: mypy app
 
       - name: Tests
+        working-directory: server
         run: pytest -q
