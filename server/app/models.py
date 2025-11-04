@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import sqlalchemy as sa
-from sqlalchemy import Index, CheckConstraint, text, func, UniqueConstraint
+from sqlalchemy import Index, CheckConstraint, text, func, UniqueConstraint, PrimaryKeyConstraint, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from .extensions import db
 
@@ -280,4 +280,107 @@ class RunTopZip(db.Model):
     __table_args__ = (
         Index("idx_run_top_zips_run", "run_id"),
         Index("idx_run_top_zips_zip", "zip5"),
+    )
+
+# ---- Sequences for line_no autoincrement (used in server_default) ----
+STAGING_MAIL_LINE_NO_SEQ = sa.Sequence("staging_mail_line_no_seq", metadata=db.metadata)
+STAGING_CRM_LINE_NO_SEQ  = sa.Sequence("staging_crm_line_no_seq",  metadata=db.metadata)
+
+# ======================
+# RAW staging tables
+# ======================
+
+class StagingRawMail(db.Model):
+    __tablename__ = "staging_raw_mail"
+
+    id         = db.Column(sa.BigInteger, primary_key=True, autoincrement=True)
+    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    rownum     = db.Column(sa.Integer, nullable=False)
+    data       = db.Column(JSONB(astext_type=sa.Text()), nullable=False)
+    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+
+    __table_args__ = (
+        Index("idx_raw_mail_run_row", "run_id", "rownum"),
+        Index("idx_raw_mail_run", "run_id"),
+    )
+
+class StagingRawCrm(db.Model):
+    __tablename__ = "staging_raw_crm"
+
+    id         = db.Column(sa.BigInteger, primary_key=True, autoincrement=True)
+    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    rownum     = db.Column(sa.Integer, nullable=False)
+    data       = db.Column(JSONB(astext_type=sa.Text()), nullable=False)
+    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+
+    __table_args__ = (
+        Index("idx_raw_crm_run_row", "run_id", "rownum"),
+        Index("idx_raw_crm_run", "run_id"),
+    )
+
+# ======================
+# NORMALIZED staging tables
+# ======================
+
+class StagingMail(db.Model):
+    __tablename__ = "staging_mail"
+
+    # NOTE: 'id' is TEXT (caller-supplied); no sequence here
+    id         = db.Column(sa.Text, nullable=True)
+    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    address1   = db.Column(sa.Text)
+    address2   = db.Column(sa.Text)
+    city       = db.Column(sa.Text)
+    state      = db.Column(sa.Text)
+    zip        = db.Column(sa.Text)
+
+    sent_date  = db.Column(sa.Date)  # normalized to DATE upstream
+    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+
+    # Composite PK: (run_id, line_no) with explicit sequence
+    line_no    = db.Column(
+        sa.BigInteger,
+        server_default=STAGING_MAIL_LINE_NO_SEQ.next_value(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "line_no", name="staging_mail_pkey"),
+        Index("ix_staging_mail_run_id_id", "run_id", "id"),
+        Index("idx_stg_mail_run", "run_id"),
+    )
+
+class StagingCrm(db.Model):
+    __tablename__ = "staging_crm"
+
+    # Keep a numeric 'id' if you want, but NOT as primary key (PK is composite below)
+    id         = db.Column(sa.BigInteger, nullable=True)
+
+    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
+    crm_id     = db.Column(sa.Text)
+    address1   = db.Column(sa.Text)
+    address2   = db.Column(sa.Text)
+    city       = db.Column(sa.Text)
+    state      = db.Column(sa.Text)
+    zip        = db.Column(sa.Text)
+    job_date   = db.Column(sa.Date)
+    job_value  = db.Column(sa.Numeric(12, 2))
+    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+
+    line_no    = db.Column(
+        sa.BigInteger,
+        server_default=STAGING_CRM_LINE_NO_SEQ.next_value(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        PrimaryKeyConstraint("run_id", "line_no", name="staging_crm_pkey"),
+        Index("ix_staging_crm_run_id_crm_id", "run_id", "crm_id"),
+        Index("idx_stg_crm_run", "run_id"),
     )
