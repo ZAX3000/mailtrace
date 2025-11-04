@@ -1,6 +1,6 @@
 <!-- client/src/pages/Dashboard.vue -->
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
 import ModalMappingRequired from '@/components/ModalMappingRequired.vue'
@@ -25,7 +25,7 @@ useUploadGuard(() => (showUploadGuard.value = true))
 
 // Mapping modal state
 const showMapping = ref(false)
-const missing = ref<{ mail?: string[]; crm?: string[] }>({})
+const missing = ref<Record<string, string[]>>({})
 
 // ---- UI handlers ------------------------------------------------------------
 
@@ -86,8 +86,6 @@ onMounted(async () => {
     router.replace({ path: route.path, query: { ...route.query, run_id: runId } })
   }
   window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: runId }
-  await nextTick()
-  window.initDashboard?.(runId)
 
   // DEBUG console hooks
   ;(window as any).MT_DEBUG = {

@@ -5,21 +5,21 @@ export type StartRunResponse =
   | { kind: 'error'; status?: number; message?: string }
 
 export type RunStatus = {
-  status?: 'queued' | 'running' | 'done' | 'failed'
+  run_id?: string
+  status?: 'queued' | 'matching' | 'aggregating' | 'done' | 'failed'
   step?: string
   message?: string
   pct?: number
 }
 
-const API = (import.meta as any)?.env?.VITE_API_BASE?.toString?.() || '' // e.g. http://localhost:5000
+const API = (import.meta as any)?.env?.VITE_API_BASE?.toString?.() || ''
 
 async function safeParse<T>(res: Response): Promise<T | string> {
   const text = await res.text()
-  try { return JSON.parse(text) as T } catch { return text } // don’t throw on HTML/error pages
+  try { return JSON.parse(text) as T } catch { return text }
 }
 
 function url(path: string) {
-  // If API is set, prefix it; otherwise assume Vite proxy handles /api
   return API ? `${API}${path}` : path
 }
 
@@ -27,20 +27,27 @@ export async function startRun(runId: string): Promise<StartRunResponse> {
   const res = await fetch(url(`/api/runs/${encodeURIComponent(runId)}/start`), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
   })
-  const data = await safeParse<StartRunResponse>(res)
+
+  const data = await safeParse<{ message?: string; missing?: Record<string, string[]> }>(res)
+
+  if (res.status === 409 && typeof data !== 'string' && data?.missing) {
+    return { kind: 'needs-mapping', missing: data.missing }
+  }
 
   if (!res.ok) {
     return {
       kind: 'error',
       status: res.status,
-      message:
-        typeof data === 'string'
-          ? data || 'Start failed'
-          : (data as any)?.message || 'Start failed',
+      message: 
+        typeof data === 'string' 
+          ? (data || 'Start failed') 
+          : (data?.message || 'Start failed'),
     }
   }
-  return (typeof data === 'string' ? { kind: 'error', status: res.status, message: data } : data) as StartRunResponse
+
+  return { kind: 'ok' }
 }
 
 export async function getRunStatus(runId: string): Promise<RunStatus> {
@@ -48,10 +55,10 @@ export async function getRunStatus(runId: string): Promise<RunStatus> {
     method: 'GET',
     headers: { Accept: 'application/json' },
     cache: 'no-store',
+    credentials: 'same-origin',
   })
 
   if (!res.ok) {
-    // Surface a readable message but don’t crash the poller
     return {
       status: 'failed',
       message: `Status ${res.status} while polling`,
@@ -60,5 +67,20 @@ export async function getRunStatus(runId: string): Promise<RunStatus> {
   }
 
   const data = await safeParse<RunStatus>(res)
-  return (typeof data === 'string' ? { status: 'failed', message: data, pct: 100 } : data) as RunStatus
+  return (typeof data === 'string'
+    ? { status: 'failed', message: data, pct: 100 }
+    : data) as RunStatus
+}
+
+export async function createRun(): Promise<{ run_id: string }> {
+  const res = await fetch(url(`/api/runs`), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'same-origin',
+  })
+  const data = await safeParse<{ run_id: string }>(res)
+  if (!res.ok || typeof data === 'string' || !data?.run_id) {
+    throw new Error(typeof data === 'string' ? data : 'Failed to create run')
+  }
+  return data
 }

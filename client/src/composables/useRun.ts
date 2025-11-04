@@ -3,6 +3,8 @@ import { nextTick, ref } from 'vue'
 import { useLoader } from '@/stores/loader'
 import { getRunStatus, startRun, type RunStatus, type StartRunResponse } from '@/api/runs'
 
+type WireStatus = NonNullable<RunStatus['status']>
+
 export function useRun() {
   const loader = useLoader()
   const running = ref(false)
@@ -43,15 +45,17 @@ export function useRun() {
         const s: RunStatus = await getRunStatus(runId)
         console.debug('[run] status tick', s)
 
-        if (typeof s.pct === 'number') loader.setProgress(s.pct)
+        if (typeof s.pct === 'number') loader.setProgress(Math.max(0, Math.min(100, s.pct)))
+
         if (s.step || s.message) loader.setMessage(String(s.step || s.message))
 
-        const status = String(s.status || '').toLowerCase()
-        const step   = String(s.step   || '').toLowerCase()
+        const status = (s.status || '').toLowerCase() as WireStatus
+        const step   = (s.step   || '').toLowerCase()
 
         if (status === 'failed' || step === 'failed') {
           throw new Error(s.message || 'Matching failed')
         }
+
         if (status === 'done' || step === 'done' || s.pct === 100) {
           break
         }
@@ -72,7 +76,6 @@ export function useRun() {
     } finally {
       running.value = false
       console.debug('[run] ⎋ cleanup: running=false; started=%s (loader left open)', started)
-
     }
   }
 

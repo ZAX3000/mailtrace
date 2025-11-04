@@ -8,10 +8,10 @@ from typing import Dict, Any, List, Set, Optional, Callable
 
 from flask import current_app, has_app_context
 
-from app.dao import run_dao, result_dao, staging_dao, mapper_dao
+from app.dao import run_dao, staging_dao, mapper_dao
 from app.services import summary
 from app.services.mapper import canon_for, apply_mapping
-from app.services.matching import persist_matches_for_run  # writes to matches table
+from app.services.matching import persist_matches_for_run
 
 log = logging.getLogger(__name__)
 
@@ -32,17 +32,12 @@ STEP = {
 
 # ---------- Tiny helpers (handle legacy/new DAO signatures) ----------
 def _count_with_optional_user(fn: Callable, run_id: str, user_id: Optional[str]) -> int:
-    """Call count fn that may accept (run_id) or (run_id, user_id)."""
     try:
-        return int(fn(run_id, user_id))  # new-style (rid, uid)
+        return int(fn(run_id, user_id))
     except TypeError:
-        return int(fn(run_id))           # legacy (rid)
+        return int(fn(run_id))
 
 def _fetch_with_user(fn: Callable, run_id: str, user_id: Optional[str], limit: Optional[int] = None):
-    """
-    Always pass user_id to fetch fns that expect it; tolerate legacy signatures that don't.
-    We prefer fetch(run_id, user_id[, limit]) but fall back to fetch(run_id[, limit]).
-    """
     try:
         if limit is None:
             return fn(run_id, user_id)
@@ -53,18 +48,18 @@ def _fetch_with_user(fn: Callable, run_id: str, user_id: Optional[str], limit: O
         return fn(run_id, limit)
 
 def _set(run_id: str, key: str, *, pct: int | None = None, msg: str | None = None) -> None:
-    """Single place to push status/pct/message with sane defaults."""
     default_pct, default_msg = STEP.get(key, (None, None))
     pct = default_pct if pct is None else pct
     msg = default_msg if msg is None else msg
     log.debug("status [%s] run_id=%s pct=%s msg=%s", key, run_id, pct, msg)
     run_dao.update_step(run_id, step=key, pct=pct or 0, message=msg or "")
 
+def _fail(run_id: str, *, msg: str) -> None:
+    log.error("run %s failed: %s", run_id, msg)
+    run_dao.update_step(run_id, step="failed", pct=100, message=msg)
+    raise RuntimeError(msg)
+
 def _tick(run_id: str, substep: str, *, pct: int | None = None, msg: str | None = None) -> None:
-    """
-    Lightweight progress nudge during long matching phases.
-    Uses the 'matching' umbrella step; decorates message with a substep label.
-    """
     base_pct, _ = STEP.get("matching", (90, "Linking Mail ↔ CRM"))
     pct = base_pct if pct is None else pct
     m = f"[{substep}] {msg or ''}".strip()
@@ -74,20 +69,14 @@ def _tick(run_id: str, substep: str, *, pct: int | None = None, msg: str | None 
 # -------- Public API (controllers call only these) --------
 
 def create_or_get_active_run(user_id: str) -> str:
-    """
-    Ensure there's an active run for this user and return its id.
-    run_dao is the source of truth for status/pct/step.
-    """
     rid = run_dao.create_or_get_active_run(user_id)
     log.debug("create_or_get_active_run: user=%s -> run_id=%s", user_id, rid)
     return rid
 
 def mark_start(run_id: str) -> None:
-    """Flip UI immediately so loader pops before heavy work."""
     _set(run_id, "starting")
 
 def get_status(run_id: str) -> Dict[str, Any]:
-    """Compact, UI-friendly status snapshot (stable shape)."""
     s = run_dao.status(run_id) or {}
     out = {
         "run_id": run_id,
@@ -99,25 +88,42 @@ def get_status(run_id: str) -> Dict[str, Any]:
     log.debug("get_status(%s) -> %s", run_id, out)
     return out
 
-def maybe_kick_matching(run_id: str) -> None:
-    """
-    If both sources are normalized, mark 'matching' and start the worker thread.
-    Idempotent: won't double-start if already in matching/aggregating/done/failed.
-    """
+# -------- Orchestration entrypoint --------
+
+def start_pipeline(run_id: str, user_id: str) -> None:
+    mark_start(run_id)
+
+    _set(run_id, "normalizing_mail")
+    mail_n = normalize_from_raw(run_id, user_id, "mail")
+    if mail_n <= 0:
+        _fail(run_id, msg="Mail CSV appears empty or invalid after normalization.")
+
+    _set(run_id, "normalizing_crm")
+    crm_n = normalize_from_raw(run_id, user_id, "crm")
+    if crm_n <= 0:
+        _fail(run_id, msg="CRM CSV appears empty or invalid after normalization.")
+
+    if not run_dao.pair_ready(run_id):
+        _fail(run_id, msg="Staging not ready after normalization (internal consistency error).")
+
+    start_matching(run_id)
+
+# -------- Matching launcher (service-layer, uses DAO for persistence) --------
+
+def start_matching(run_id: str) -> None:
     meta = run_dao.status(run_id) or {}
     current = (meta or {}).get("status")
-    log.debug("maybe_kick_matching: run_id=%s status=%r", run_id, current)
 
     if current in {"matching", "aggregating", "done", "failed"}:
-        log.debug("maybe_kick_matching: already active/terminal, skip")
-        return
-    if not _sources_ready(run_id):
-        log.debug("maybe_kick_matching: sources not ready, skip")
+        log.debug("start_matching: run_id=%s already %s; skip", run_id, current)
         return
 
-    # Transition to 'matching' to block duplicates
-    _set(run_id, "matching")  # pct≈90 + friendly label
-    log.info("maybe_kick_matching: starting background matcher for run_id=%s", run_id)
+    if not run_dao.pair_ready(run_id):
+        log.debug("start_matching: run_id=%s not pair_ready; skip", run_id)
+        return
+
+    run_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
+    log.info("start_matching: claimed run_id=%s; spawning matcher thread", run_id)
 
     app = current_app._get_current_object()
     t = Thread(
@@ -128,43 +134,25 @@ def maybe_kick_matching(run_id: str) -> None:
     )
     t.start()
 
-def get_result(run_id: str) -> Dict[str, Any]:
-    """Return consolidated result payload once status == 'done'."""
-    meta = run_dao.status(run_id) or {}
-    if (meta or {}).get("status") != "done":
-        log.debug("get_result(%s): not ready yet", run_id)
-        return {"error": "not_ready"}
-    payload = result_dao.get_full_result(run_id)
-    log.debug("get_result(%s): bytes=%s", run_id, len(str(payload)))
-    return payload
-
-# -------- Mapping gate (used by POST /runs/:id/start before normalize) --------
+# -------- Mapping gate (used by controller before starting pipeline) --------
 
 def check_mapping_readiness(run_id: str) -> Dict[str, List[str]]:
-    """
-    Returns a dict of missing canonical fields per source, e.g.:
-      {}  -> ready
-      {"mail": ["zip"], "crm": ["job_date"]}  -> needs mapping
-    Logic: RAW headers + saved mapping + alias tables.
-    """
     out: Dict[str, List[str]] = {}
 
     for source in ("mail", "crm"):
-        required, alias = canon_for(source)  # required: Set[str], alias: Dict[str, List[str]]
+        required, alias = canon_for(source)
 
-        hdrs = mapper_dao.get_raw_headers(run_id, source, sample=1)  # cheap probe
+        hdrs = mapper_dao.get_raw_headers(run_id, source, sample=1)
         raw_headers: List[str] = [h or "" for h in (hdrs.get("headers") or [])]
         raw_lc = {h.strip().lower() for h in raw_headers if h is not None}
 
-        mapping = mapper_dao.get_mapping(run_id, source) or {}  # {canonical -> raw_header}
+        mapping = mapper_dao.get_mapping(run_id, source) or {}
 
-        # coverage by explicit mapping
         covered: Set[str] = {
             canon for canon, raw_name in mapping.items()
             if (raw_name or "").strip().lower() in raw_lc
         }
 
-        # coverage by alias (fallbacks)
         for canon, alts in alias.items():
             if canon in covered:
                 continue
@@ -183,23 +171,14 @@ def check_mapping_readiness(run_id: str) -> Dict[str, List[str]]:
 # -------- Normalize RAW -> staging for a single source --------
 
 def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
-    """
-    Read RAW rows for `source`, apply mapping+aliases, coerce types, and write to staging_{source}.
-    Returns the number of rows inserted.
-    """
     source = (source or "").strip().lower()
     if source not in {"mail", "crm"}:
         raise ValueError(f"invalid source: {source}")
 
     log.info("normalize_from_raw: run_id=%s user_id=%s source=%s", run_id, user_id, source)
 
-    _required, alias = canon_for(source)
+    required, alias = canon_for(source)
     mapping = mapper_dao.get_mapping(run_id, source) or {}
-
-    if source == "mail":
-        _set(run_id, "normalizing_mail")
-    else:
-        _set(run_id, "normalizing_crm")
 
     raw_rows: List[Dict[str, Any]] = mapper_dao.get_raw_rows(run_id, source)
     log.debug("normalize_from_raw: raw_rows=%d", len(raw_rows))
@@ -207,7 +186,17 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
     normalized = apply_mapping(raw_rows, mapping, alias)
     log.debug("normalize_from_raw: normalized_rows=%d", len(normalized))
 
-    # --- type coercions live here (not at upload time) ---
+    if len(normalized) == 0:
+        missing = required - set(mapping.keys())
+        hint = ""
+        if missing:
+            hint = f"Missing required mapping for: {', '.join(sorted(missing))}."
+        _fail(
+            run_id,
+            msg=(f"{source.upper()} normalization produced 0 rows. "
+                 f"Check your CSV and mapping. {hint}").strip()
+        )
+
     def _none_if_empty(v):
         if v is None: return None
         if isinstance(v, str) and v.strip() == "": return None
@@ -245,49 +234,11 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
 
         _set(run_id, "crm_ready")
 
-    on_normalized_source_ready(run_id)
     return count
 
-# -------- Optional convenience for mapper service --------
-
-def on_normalized_source_ready(run_id: str) -> None:
-    """Opportunistically kick matching if both sources ready."""
-    log.debug("on_normalized_source_ready(%s)", run_id)
-    maybe_kick_matching(run_id)
-
-# -------- Internal helpers --------
-
-def _sources_ready(run_id: str) -> bool:
-    """
-    True when both normalized staging tables have rows for this run_id.
-    Uses count_* if present (preferred), else falls back to fetch (both tolerant to user_id arity).
-    """
-    meta = run_dao.status(run_id) or {}
-    user_id = meta.get("user_id") or run_dao.get_user_id(run_id)
-
-    count_mail = getattr(staging_dao, "count_normalized_mail", None)
-    count_crm  = getattr(staging_dao, "count_normalized_crm", None)
-
-    if callable(count_mail) and callable(count_crm):
-        ok = (_count_with_optional_user(count_mail, run_id, user_id) > 0
-              and _count_with_optional_user(count_crm, run_id, user_id) > 0)
-        log.debug("_sources_ready(%s) via counts -> %s", run_id, ok)
-        return ok
-
-    # Fallback: fetch a few rows (DAO may require user_id)
-    mail_rows: List[dict] = _fetch_with_user(staging_dao.fetch_normalized_mail_rows, run_id, user_id, limit=1)
-    crm_rows:  List[dict] = _fetch_with_user(staging_dao.fetch_normalized_crm_rows,  run_id, user_id, limit=1)
-    ok = bool(mail_rows) and bool(crm_rows)
-    log.debug("_sources_ready(%s) via fetch -> %s", run_id, ok)
-    return ok
+# -------- Internal worker --------
 
 def _match_and_aggregate_async(app, run_id: str) -> None:
-    """
-    Background worker:
-      1) Build/refresh `matches` rows for this run (persist_matches_for_run)
-      2) Build summary payload (summary.build_payload) reading from `matches`
-      3) Save payload and mark run done
-    """
     with app.app_context():
         stop = Event()
 
@@ -306,11 +257,9 @@ def _match_and_aggregate_async(app, run_id: str) -> None:
 
             _tick(run_id, "load", pct=91, msg="Loading normalized rows")
 
-            # Identify user for this run (needed by multi-tenant staging reads)
             run_meta = run_dao.status(run_id) or {}
             user_id: Optional[str] = run_meta.get("user_id") or run_dao.get_user_id(run_id)
 
-            # Optional counts for nicer progress text
             try:
                 mail_n = _count_with_optional_user(
                     getattr(staging_dao, "count_normalized_mail",
@@ -329,7 +278,6 @@ def _match_and_aggregate_async(app, run_id: str) -> None:
             _tick(run_id, "match_start", pct=93, msg="Running matcher")
             t0 = time.time()
 
-            # Fetch normalized rows (DAO may require user_id)
             mail_rows: List[dict] = _fetch_with_user(staging_dao.fetch_normalized_mail_rows, run_id, user_id)
             crm_rows:  List[dict] = _fetch_with_user(staging_dao.fetch_normalized_crm_rows,  run_id, user_id)
 
@@ -357,10 +305,6 @@ def _match_and_aggregate_async(app, run_id: str) -> None:
 
             _set(run_id, "aggregating")
             _tick(run_id, "finalize", pct=99, msg="Finalizing payload")
-
-            # If your summary builder doesn't persist, you might do:
-            # result_dao.save_payload(run_id, payload)  # <- uncomment if needed
-
             _set(run_id, "done")
             log.info("matcher: done run_id=%s", run_id)
 

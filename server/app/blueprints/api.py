@@ -92,17 +92,12 @@ def save_mapping(run_id: UUID):
 def start_run(run_id: UUID):
     uid = _uid()
 
+    # fail fast on mapping gaps
     missing = pipeline.check_mapping_readiness(str(run_id))
     if missing:
         return jsonify({"message": "Mapping required", "missing": missing}), 409
 
-    pipeline.mark_start(str(run_id))
-
-    pipeline.normalize_from_raw(str(run_id), uid, "mail")
-    pipeline.normalize_from_raw(str(run_id), uid, "crm")
-
-    pipeline.maybe_kick_matching(str(run_id))
-
+    pipeline.start_pipeline(str(run_id), uid)
     return jsonify({"ok": True}), 202
 
 
@@ -114,6 +109,7 @@ def run_status(run_id: UUID):
 
 from flask import jsonify
 from app.errors import NotFound, Conflict, Unauthorized
+
 
 @api_bp.get("/runs/<uuid:run_id>/result")
 def run_result(run_id: UUID):
@@ -131,6 +127,7 @@ def run_result(run_id: UUID):
 # -----------------------
 # Mapper utilities
 # -----------------------
+
 
 @api_bp.get("/runs/<uuid:run_id>/headers")
 def headers_for_mapper(run_id: UUID):

@@ -11,25 +11,13 @@ export interface CreateRunRes {
 export interface UploadRes {
   run_id: string
   source: Source
-  state: UploadState                 // 'ready' => normalized; 'raw_only' => needs mapper
-  // Optional hints the server may return (esp. when state === 'raw_only')
+  state: UploadState
   missing?: string[]
   sample_headers?: string[]
   sample_rows?: any[]
   message?: string
 }
 
-/** Create (or get) an active run for the current user. */
-export async function createRun(): Promise<CreateRunRes> {
-  const res = await http.post<CreateRunRes>('/runs')
-  return res.data
-}
-
-/**
- * Upload one source (mail|crm). Server ingests RAW and may immediately normalize.
- * - 201 → { state: 'ready' | 'raw_only' }
- * - 409 → mapping required (handled here; returns { state: 'raw_only', ...hints })
- */
 export async function uploadSource(runId: string, source: Source, file: File): Promise<UploadRes> {
   const fd = new FormData()
   fd.append('file', file)
@@ -39,7 +27,6 @@ export async function uploadSource(runId: string, source: Source, file: File): P
     fd,
     {
       headers: { 'Content-Type': 'multipart/form-data' },
-      // Treat 409 as a controlled outcome instead of throwing
       validateStatus: (s) => (s >= 200 && s < 300) || s === 409,
       withCredentials: true,
     }

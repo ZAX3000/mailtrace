@@ -49,11 +49,13 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRun } from '@/composables/useRun'
-import { createRun, uploadSource, type Source } from '@/api/uploads'
+import { uploadSource, type Source } from '@/api/uploads'
+import { createRun } from '@/api/runs'
 import { log } from '@/utils/logger'
 
 const emit = defineEmits<{
   (e: 'mapping-required', missing: Record<string, string[]>): void
+  (e: 'need-both-files'): void
 }>()
 
 const runId = ref<string>('')
@@ -88,7 +90,7 @@ async function onPick(source: Source) {
     const res = await uploadSource(runId.value, source, file)
     log.info('UI ▶ upload done', { source, res })
 
-    // RAW-only upload → nudge mapper immediately (keeps your existing behavior)
+    // RAW-only upload → nudge mapper immediately
     if (res.state === 'raw_only') {
       window.dispatchEvent(
         new CustomEvent('mt:open-mapper', { detail: { run_id: runId.value, source } })
@@ -114,14 +116,19 @@ const { running, kickOffAndPoll } = useRun()
 
 async function onRun(ev?: Event) {
   ev?.preventDefault?.()
-  if (!runId.value) {
-    alert('Please upload both CSV files first.')
+
+  const hasMail = !!mailInput.value?.files?.[0]
+  const hasCrm  = !!crmInput.value?.files?.[0]
+  if (!hasMail || !hasCrm) {
+    // Let Dashboard open its guard modal
+    emit('need-both-files')
     return
   }
 
+  await ensureRun()
   log.info('UI ▶ Run clicked', { runId: runId.value })
 
-  // Delegate to the composable (it shows the loader immediately, polls, and logs ticks)
+  // Delegate to the composable (it shows the loader, polls, and logs ticks)
   await kickOffAndPoll(runId.value, (missing) => {
     log.warn('UI ▶ needs mapping (409)', { runId: runId.value, missing })
     emit('mapping-required', missing)
