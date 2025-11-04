@@ -1,0 +1,12 @@
+/* src/styles/theme-light.css */
+:root{
+  --bg-color:      var(--bg);
+  --surface-color: #ffffff;
+  --ink-color:     var(--ink);
+  --muted-color:   var(--muted);
+  --line-color:    var(--line);
+  --brand-color:   var(--blue);
+  --accent-color:  var(--green);
+
+  --elev-2: 0 24px 60px rgba(var(--shadow-rgb) / 0.18);
+}

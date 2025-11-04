@@ -34,18 +34,20 @@ The system is now prepped for an Azure setup alongside Docker dev server.
 
 ## 0.5) Cold boot after a reboot (TL;DR)
 
-1. **Start Docker Desktop** → wait for **Engine running** (enable auto-start in Settings → General).
-2. In the repo:
+1. **Start Docker Desktop** → wait for **Engine running**.
+2. In the repo root:
 
    ```bash
    docker compose up -d db
    ```
-3. Activate venv & env, run migrations (safe to re-run), start Flask:
+3. Activate venv & env, **run Alembic** from `/server`, start Flask:
 
    ```bash
    # Windows Git Bash/MSYS2
    source .venv/Scripts/activate
-   python -m flask --app app:create_app db upgrade
+   cd server
+   # DATABASE_URL loaded from ../.env by env.py (or set it inline)
+   alembic upgrade head
    python -m flask --app app:create_app run --debug -h 127.0.0.1 -p 5000
    ```
 4. Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/)
@@ -113,7 +115,7 @@ The repo includes `docker-compose.yml` with a `db` service.
 * Credentials: `mailtrace` / `devpass`
 * DB name: `mailtrace`
 
-Start it:
+Start it (make sure the Docker app is running first!):
 
 ```bash
 docker compose up -d db
@@ -132,24 +134,24 @@ docker compose down -v && docker compose up -d db
 
 ## 5) Configure environment
 
-Create `.env` (or copy from `.env.example`) with **Postgres as default**:
+*(keep your section as-is, but add this tip at the end)*
 
-```env
-# Flask (Flask 3: use --debug flag at runtime; FLASK_ENV is deprecated)
-FLASK_APP=app:create_app
-DISABLE_AUTH=1
-
-# Database (dev/CI/prod parity = Postgres)
-DATABASE_URL=postgresql+psycopg://mailtrace:devpass@localhost:5433/mailtrace
-SQLALCHEMY_DATABASE_URI=${DATABASE_URL}
-```
+> **Tip:** Alembic reads `DATABASE_URL` via `server/migrations/env.py`. We load `../.env` (repo root). You can also export/set `DATABASE_URL` manually.
 
 ---
 
-## 6) Apply database migrations (Alembic/Flask-Migrate)
+## 6) Apply database migrations (**Alembic**)
+
+> We now use **Alembic CLI directly** (not `flask db …`).
 
 ```bash
-python -m flask --app app:create_app db upgrade
+# From repo root
+docker compose up -d db
+
+# In a new shell
+source .venv/Scripts/activate        # or source .venv/bin/activate (macOS/Linux)
+cd server
+alembic upgrade head
 ```
 
 **Verify (optional):**
@@ -168,6 +170,7 @@ PY
 ## 7) Run the app
 
 ```bash
+# Still inside /server
 python -m flask --app app:create_app run --debug -h 127.0.0.1 -p 5000
 ```
 
@@ -191,63 +194,95 @@ Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/) and walk the main pages.
 ### Create a new migration after model changes
 
 ```bash
-python -m flask --app app:create_app db migrate -m "describe change"
-python -m flask --app app:create_app db upgrade
+cd server
+alembic revision --autogenerate -m "describe change"
+alembic upgrade head
 ```
 
-### Reset the local DB completely
+### See current DB revision / heads
+
+```bash
+cd server
+alembic current
+alembic heads
+```
+
+### Reset the local DB completely (fresh containers + schema)
 
 ```bash
 docker compose down -v
 docker compose up -d db
-python -m flask --app app:create_app db upgrade
+cd server
+alembic upgrade head
 ```
 
-### Seed dev data (optional)
+### If your DB was manually changed and you need to realign Alembic
 
-Create `scripts/seed_dev.py`, then:
+* **Mark empty DB as baseline without running DDL**:
 
-```bash
-python scripts/seed_dev.py
-```
+  ```bash
+  cd server
+  alembic stamp head
+  ```
+* **Mark DB as empty (dangerous; dev only)**:
+
+  ```bash
+  cd server
+  alembic stamp base
+  ```
 
 ---
 
-## 10) Troubleshooting
+## 10) Troubleshooting (Alembic-specific)
 
-* **Docker engine not running (Windows)**
-  Error: `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified`
-  **Fix:** Start Docker Desktop → wait for **Engine running** → `docker compose up -d`.
+* **`Target database is not up to date.`**
+  You have pending migrations on disk. Run:
 
-* **`psycopg OperationalError: connection refused`**
-  `docker compose ps` → ensure `mailtrace-db` is **healthy**. Port must be **5433** on host.
+  ```bash
+  cd server && alembic upgrade head
+  ```
 
-* **`password authentication failed for user "mailtrace"`**
-  `.env` must match docker creds. If changed, `docker compose down -v && docker compose up -d db`.
+* **`relation "public.alembic_version" does not exist` during `upgrade`**
+  Ensure `server/migrations/env.py` does **not** set `version_table_schema`, and your migration files don’t touch `alembic_version`. We ignore it via `include_object` in `env.py`.
 
-* **Nothing at [http://127.0.0.1:5000/](http://127.0.0.1:5000/)**
-  App may have crashed on first DB call. Check Flask terminal for traceback; ensure DB is up and healthy.
+* **Downgrade errors like `index "idx_…" does not exist`**
+  This happens if you previously `stamp`ed without running `upgrade`. Easiest fix:
 
-* **Flask dev flags**
-  Use `--debug` with Flask 3. `FLASK_ENV` is deprecated and ignored.
+  ```bash
+  cd server
+  alembic stamp base
+  alembic upgrade head
+  ```
+
+* **Auth failures connecting to Postgres**
+  `.env` must match docker creds:
+
+  ```
+  DATABASE_URL=postgresql+psycopg://mailtrace:devpass@localhost:5433/mailtrace
+  ```
+
+  If changed, `docker compose down -v && docker compose up -d db`.
 
 ---
 
 ## 11) What’s in this setup (and why)
 
-* **Postgres in Docker** on **5433** → local/dev/CI mirrors prod behavior.
-* **Flask-Migrate/Alembic** manages schema changes.
-* **`.env`** is the single source of truth for DB config.
-* **Jinja** template mapping in VS Code to avoid false lint errors.
+*(keep as-is, but add)*
+
+* **Alembic** is the single source of truth for schema changes (via `server/migrations`).
 
 ---
 
-### Appendix A — Project layout
+### Appendix A — Project layout (updated)
 
 ```
-├─ app/                 # create_app(), routes, services, repositories, models, templates, static
-├─ alembic/             # migrations
-├─ docker-compose.yml   # postgres:16 on host 5433
+├─ server/
+│  ├─ app/                   # create_app(), routes, services, repositories, models, templates, static
+│  └─ migrations/            # Alembic
+│     ├─ env.py              # loads ../.env, imports app models, ignores alembic_version
+│     ├─ alembic.ini
+│     └─ versions/           # migration files
+├─ docker-compose.yml        # postgres:16 on host 5433
 ├─ requirements.txt
 ├─ .env.example
 └─ README.md
@@ -255,21 +290,46 @@ python scripts/seed_dev.py
 
 ### Appendix B — Quick demo (no login)
 
-1. `docker compose up -d db`
-2. `python -m flask --app app:create_app db upgrade`
-3. `.env: DISABLE_AUTH=1`
-4. `python -m flask --app app:create_app run --debug`
-5. Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/)
-6. Upload the two sample spreadsheets from `app/static/samples/`.
+```bash
+docker compose up -d db
+cd server
+alembic upgrade head
+cd ..
+# .env: DISABLE_AUTH=1
+cd server && python -m flask --app app:create_app run --debug
+```
 
 ### Appendix C — Full reset (nuclear option)
 
 ```bash
 docker compose down -v
 docker compose up -d db
-python -m flask --app app:create_app db upgrade
+cd server && alembic upgrade head
 ```
 
 ---
 
-If you want, I can also add a tiny `start-dev.cmd`/`start-dev.sh` so one double-click brings up Docker → DB → Flask.
+## Optional: tiny helper scripts
+
+**`start-dev.sh`**
+
+```bash
+#!/usr/bin/env bash
+set -e
+docker compose up -d db
+source .venv/bin/activate
+cd server
+alembic upgrade head
+python -m flask --app app:create_app run --debug -h 127.0.0.1 -p 5000
+```
+
+**`start-dev.cmd` (Windows)**
+
+```bat
+@echo off
+docker compose up -d db
+call .venv\Scripts\activate
+cd server
+alembic upgrade head
+python -m flask --app app:create_app run --debug -h 127.0.0.1 -p 5000
+```

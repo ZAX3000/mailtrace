@@ -1,0 +1,193 @@
+/* ==========================================================================
+   BASE.CSS
+   ========================================================================== */
+
+/* Box model + font smoothing */
+*,
+*::before,
+*::after { box-sizing: border-box; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-family: var(--font-sans, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif);
+  line-height: 1.5;
+  scroll-behavior: smooth;
+}
+
+:root {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Body + colors */
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--bg-color);
+  color: var(--ink-color);                /* ← use ink for readable defaults */
+}
+
+/* Layout helpers you already use */
+.wrap { max-width: 1100px; margin-inline: auto; padding: 18px; }
+.row { display: flex; gap: 16px; flex-wrap: wrap; }
+
+.section { margin-top: 18px; }
+
+/* Type primitives */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 var(--sp-2, 8px);
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--ink-color);
+}
+
+/* header settings */
+h1 { font-size: clamp(1.75rem, 1.2rem + 2vw, 2.25rem); }
+h3 { font-size: clamp(1.25rem, 1rem + 1vw, 1.5rem); }
+h4 { font-size: var(--fs-lg, 1.125rem); }
+h5 { font-size: var(--fs-md, 1rem); }
+h6 { font-size: var(--fs-sm, 0.875rem); }
+
+p { margin: 0 0 var(--sp-3, 12px); }
+small { font-size: var(--fs-sm, 0.875rem); }
+strong { font-weight: 600; }
+
+/* Links */
+a {
+  color: var(--accent-color);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+a:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: var(--focus-ring);
+  border-radius: 6px;
+}
+
+/* Forms (baseline only — component skinning lives in components.css) */
+label.small { font-size: 12px; color: var(--muted-color); }
+input[type="file"] { display: block; margin: 6px 0 10px 0; }
+select, input[type="checkbox"] { margin-left: 6px; }
+
+/* KPI text only (container skin is in components.css) */
+.kpi { min-width: 140px; text-align: center; }
+.kpi .v { font-size: 22px; font-weight: 700; color: var(--ink-color); }
+.kpi .l { font-size: 12px; color: var(--brand-color); font-weight: 700; opacity: .9; margin-top: .25rem; }
+
+/* Error banner */
+.err {
+  display: none;
+  background: #3b0f12;
+  border: 1px solid #ef4444;
+  color: #fecaca;
+  padding: 8px 10px;
+  border-radius: 10px;
+  margin: 10px 0;
+}
+
+/* Tables — light global baseline (component skins in components.css) */
+table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; }
+th, td { border-bottom: 1px solid var(--line-color); padding: .6rem .5rem; text-align: left; }
+th { color: var(--brand-color); font-weight: 700; }
+td { color: var(--ink-color); }
+tr:nth-child(even) { background: #f8fbfe; }
+
+/* Charts/canvas — avoid global canvas sizing.
+   Use a class on chart containers instead (see components.css .mt-chart). */
+.mt-chart { width: 100%; height: 260px; display: block; }
+
+/* Utilities */
+.right { margin-left: auto; }
+.muted { color: var(--muted-color); }
+.yoy { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted-color); }
+
+/* Back-compat (Summary/Top) — keep working now, migrate to classes later */
+#cmp-summary td:nth-child(10), #cmp-summary th:nth-child(10),
+#cmp-summary td:nth-child(11), #cmp-summary th:nth-child(11) { text-align: right; }
+
+/* ===== Summary sizing + sticky header ===== */
+#cmp-summary .table-wrap {
+  height: 520px;
+  overflow-y: auto;
+  overflow-x: auto;
+  scrollbar-gutter: stable both-edges;
+  -webkit-overflow-scrolling: touch;
+  display: block;
+  position: relative;
+}
+#cmp-summary thead th {
+  position: sticky; top: 0; background: #fff;
+  z-index: 3; box-shadow: 0 1px 0 0 var(--line-color);
+}
+#cmp-summary table {
+  border-collapse: separate; border-spacing: 0;
+  width: max-content; min-width: 1400px; table-layout: fixed;
+}
+#cmp-summary th:nth-child(1),  #cmp-summary td:nth-child(1)  { min-width: var(--col-mail-addr); }
+#cmp-summary th:nth-child(2),  #cmp-summary td:nth-child(2)  { min-width: var(--col-mail-unit); text-align: center; }
+#cmp-summary th:nth-child(3),  #cmp-summary td:nth-child(3)  { min-width: var(--col-crm-addr); }
+#cmp-summary th:nth-child(4),  #cmp-summary td:nth-child(4)  { min-width: var(--col-crm-unit); text-align: center; }
+#cmp-summary th:nth-child(5),  #cmp-summary td:nth-child(5)  { min-width: var(--col-city); }
+#cmp-summary th:nth-child(6),  #cmp-summary td:nth-child(6)  { min-width: var(--col-state); text-align: center; }
+#cmp-summary th:nth-child(7),  #cmp-summary td:nth-child(7)  { min-width: var(--col-zip); text-align: center; }
+#cmp-summary th:nth-child(8),  #cmp-summary td:nth-child(8)  { min-width: var(--col-maildates); }
+#cmp-summary th:nth-child(9),  #cmp-summary td:nth-child(9)  { min-width: var(--col-crmdate); }
+#cmp-summary th:nth-child(10), #cmp-summary td:nth-child(10) { min-width: var(--col-amount); text-align: right; }
+#cmp-summary th:nth-child(11), #cmp-summary td:nth-child(11) { min-width: var(--col-conf);   text-align: right; }
+#cmp-summary th:nth-child(12), #cmp-summary td:nth-child(12) { min-width: var(--col-notes); }
+
+/* Floating header table (if used) */
+#cmp-summary .floating-head { position: sticky; top: 0; left: 0; z-index: 6; background: #fff; }
+#cmp-summary .floating-head thead th { background: #fff; border-bottom: 1px solid var(--line-color); }
+#cmp-summary .table-wrap { position: relative; }
+#cmp-summary table.floating-head { table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+
+/* Top lists */
+#cmp-top .topwrap { max-height: 170px; overflow-y: auto; overflow-x: hidden; }
+#cmp-top thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+.topwrap table[data-kind="cities"] th:first-child,
+.topwrap table[data-kind="cities"] td:first-child { width: 140px; }
+.topwrap table[data-kind="zips"] th:first-child,
+.topwrap table[data-kind="zips"] td:first-child { width: 140px; }
+
+/* Confidence color coding */
+#cmp-summary td.conf-green, #cmp-summary td.conf.conf-green { color: var(--conf-green); font-weight: 600; }
+#cmp-summary td.conf-yellow,#cmp-summary td.conf.conf-yellow{ color: var(--conf-yellow); font-weight: 600; }
+#cmp-summary td.conf-red,   #cmp-summary td.conf.conf-red   { color: var(--conf-red);   font-weight: 600; }
+
+/* Selection + motion preferences */
+::selection { background: color-mix(in srgb, var(--accent-color) 25%, transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+/* Scrollbar — thin & draggable (no odd behaviors) */
+:root { scrollbar-color: var(--line-color) transparent; scrollbar-width: thin; } /* Firefox */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--line-color);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--line-color) 80%, var(--ink-color) 20%);
+}
+
+/* App shells neutral (prevents “square nub” conflicts) */
+main, .container, .content, .dashboard, #app, .app, .page, .wrapper {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Visually-hidden utility (non-destructive) */
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0);
+  white-space: nowrap; border: 0;
+}

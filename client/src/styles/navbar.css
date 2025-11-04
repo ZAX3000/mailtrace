@@ -1,0 +1,87 @@
+/* src/styles/navbar.css */
+
+/* --- MailTrace Navbar --- */
+
+/* Local tuning tokens */
+:root {
+  --nav-logo-size: 48px;
+  --nav-padding-y: 6px;
+  --nav-padding-x: 16px;
+  --nav-max-width: 1200px;
+}
+
+/* Shell */
+.mt-nav {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--surface-color);
+  border-bottom: 1px solid var(--line-color);
+  box-shadow: 0 2px 6px rgba(var(--shadow-rgb) / 0.05);
+}
+
+/* Layout */
+.mt-nav .wrap {
+  padding: var(--nav-padding-y) var(--nav-padding-x);
+  max-width: var(--nav-max-width);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.mt-nav .left  { display: flex; align-items: center; gap: 16px; }
+.mt-nav .right { display: flex; align-items: center; gap: 18px; }
+
+.mt-nav .logo { display: flex; align-items: center; gap: 10px; }
+.mt-nav .logo img.mt-logo {
+  height: var(--nav-logo-size);
+  width: auto;
+  display: block; 
+}
+
+/* Links */
+.mt-nav a {
+  text-decoration: none;
+  color: var(--ink-color);         /* was #111 */
+  font-weight: 500;
+  font-size: 14px;
+  transition: color .15s ease, opacity .15s ease;
+}
+.mt-nav a:hover { opacity: .85; }
+
+.mt-nav a.active {
+  color: var(--accent-color);      /* was #0a66ff */
+}
+
+/* History popover */
+.mt-nav .hist { position: relative; }
+.mt-nav .hist-btn {
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  font: inherit;
+  color: var(--ink-color);
+}
+
+.mt-nav .hist-panel {
+  position: absolute;
+  right: 0; top: 28px;
+  width: 320px; max-height: 360px; overflow: auto;
+  background: var(--surface-color);
+  border: 1px solid var(--line-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(var(--shadow-rgb) / 0.08);
+  padding: 8px; display: none;
+  z-index: 41; /* over the bar itself */
+}
+.mt-nav .hist.open .hist-panel { display: block; }
+
+.mt-nav .hist-item {
+  padding: 8px 10px; border-radius: 6px;
+  display: flex; justify-content: space-between; gap: 10px; font-size: 13px;
+  color: var(--ink-color);
+}
+.mt-nav .hist-item:hover { background: color-mix(in srgb, var(--line-color) 60%, #fff 40%); }
+.mt-nav .hist-empty { padding: 10px; color: var(--muted-color); font-size: 13px; }

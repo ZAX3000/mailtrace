@@ -1,0 +1,175 @@
+/* ==========================================================================
+   TOKENS.CSS
+   - Preserves your existing variables (no breaking changes)
+   - Adds scales (spacing, radii, type, elevation)
+   - Defines semantic tokens consumed by base.css & components.css
+   ========================================================================== */
+
+:root {
+  /* ---------------------------
+     A) YOUR EXISTING TOKENS
+     --------------------------- */
+  /* brand & surfaces (from theme.css) */
+  --blue:  #0d2c54;
+  --green: #4caf6d;
+  --bg:    #f3f7fb;
+  --ink:   #0b1d36;
+  --muted: #5a6a82;
+  --line:  #e6edf5;
+
+  /* CTA gradient ramp */
+  --green-hi: #6fd18a;
+  --green-de: #3c9e5d;
+  --green-lo: #2e8e51;
+
+  /* shadow color used in cards/modals
+     NOTE: components use rgba(var(--shadow-rgb), .XX) which
+     requires comma-separated values. */
+  --shadow-rgb: 13, 44, 84;
+
+  /* Summary column widths (from base.css) */
+  --col-mail-addr: 240px;
+  --col-mail-unit: 84px;
+  --col-crm-addr:  240px;
+  --col-crm-unit:  84px;
+  --col-city:      160px;
+  --col-state:     72px;
+  --col-zip:       108px;
+  --col-maildates: 260px;
+  --col-crmdate:   130px;
+  --col-amount:    120px;
+  --col-conf:      110px;
+  --col-notes:     300px;
+
+  /* Confidence colors (from base.css) */
+  --conf-green: #16a34a;
+  --conf-yellow:#d97706;
+  --conf-red:   #dc2626;
+
+  /* --------------------------------
+     B) RAW PALETTE EXTENSIONS (optional)
+     -------------------------------- */
+  /* Neutral ramp for future use */
+  --gray-50:  #f8fafc;
+  --gray-100: #f1f5f9;
+  --gray-200: #e2e8f0;
+  --gray-300: #cbd5e1;
+  --gray-400: #94a3b8;
+  --gray-500: #64748b;
+  --gray-600: #475569;
+  --gray-700: #334155;
+  --gray-800: #1f2937;
+  --gray-900: #0f172a;
+
+  /* Branded ramps (keep your blue/green as anchors) */
+  --brand-500: var(--blue);  /* brand elements, nav accents */
+  --cta-500:   var(--green); /* primary actions (buttons, focus) */
+
+  /* Status */
+  --green-500: var(--conf-green);
+  --red-500:   var(--conf-red);
+  --amber-500: var(--conf-yellow);
+  --blue-500:  #3b82f6;
+
+  /* ---------------------------
+     C) SCALES & SYSTEM TOKENS
+     --------------------------- */
+  /* Typography */
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+               Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+               "Liberation Mono", monospace;
+
+  /* Type scale (rem) */
+  --fs-xs: 0.75rem;   /* 12px */
+  --fs-sm: 0.875rem;  /* 14px */
+  --fs-md: 1rem;      /* 16px */
+  --fs-lg: 1.125rem;  /* 18px */
+  --fs-xl: 1.25rem;   /* 20px */
+  --fs-2xl: 1.5rem;   /* 24px */
+
+  /* Spacing (rem) */
+  --sp-1: 0.25rem;  /* 4px */
+  --sp-2: 0.5rem;   /* 8px */
+  --sp-3: 0.75rem;  /* 12px */
+  --sp-4: 1rem;     /* 16px */
+  --sp-5: 1.25rem;  /* 20px */
+  --sp-6: 1.5rem;   /* 24px */
+
+  /* Radii */
+  --r-6: 6px;
+  --r-8: 8px;
+  --r-10: 10px;
+  --r-12: 12px;
+  --r-16: 16px;
+  --r-20: 20px;
+
+  /* Motion */
+  --dur-1: 120ms;
+  --dur-2: 200ms;
+  --dur-3: 320ms;
+  --ease: cubic-bezier(.2,.7,.2,1);
+
+  /* Elevation (uses --shadow-rgb) */
+  --elev-0: none;
+  --elev-1: 0 1px 2px rgba(var(--shadow-rgb), 0.10),
+            0 2px 8px rgba(var(--shadow-rgb), 0.08);
+  --elev-2: 0 6px 18px rgba(var(--shadow-rgb), 0.14),
+            0 2px 6px rgba(var(--shadow-rgb), 0.10);
+  --elev-3: 0 12px 28px rgba(var(--shadow-rgb), 0.20),
+            0 8px 16px rgba(var(--shadow-rgb), 0.12);
+
+  /* Layout */
+  --container-sm: 640px;
+  --container-md: 880px;
+  --container-lg: 1200px;
+  --container-xl: 1440px;
+
+  /* Z-index */
+  --z-base: 1;
+  --z-docked: 100;
+  --z-dropdown: 1000;
+  --z-sticky: 1100;
+  --z-modal: 10000;
+  --z-popover: 11000;
+  --z-toast: 12000;
+
+  /* --------------------------------
+     D) SEMANTIC TOKENS (consumed by base/components)
+     Themes can override these; here we map to your existing colors.
+     -------------------------------- */
+
+  /* Surfaces & text */
+  --bg-color:       var(--bg);
+  --surface-color:  #ffffff;
+  --surface-muted:  var(--gray-100);
+  --ink-color:      var(--ink);
+  --muted-color:    var(--muted);
+  --line-color:     var(--line);
+
+  /* Accent strategy:
+     - Keep brand blue available as --brand-color
+     - Use green (CTA) as the default accent for interactive elements */
+  --brand-color:    var(--brand-500);
+  --cta-color:      var(--cta-500);
+  --accent-color:   var(--cta-color);
+  --on-accent-color:#ffffff;
+
+  /* Status */
+  --success-color:  var(--green-500);
+  --danger-color:   var(--red-500);
+  --warn-color:     var(--amber-500);
+  --info-color:     var(--blue-500);
+
+  /* Focus ring */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--accent-color) 25%, transparent);
+}
+
+/* Reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --dur-1: 0ms;
+    --dur-2: 0ms;
+    --dur-3: 0ms;
+  }
+}

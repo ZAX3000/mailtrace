@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Upload Your Data</h2>
+<p class="muted">Accepted columns (order flexible; headers required). You can also download templates below.</p>
+<div class="card" style="margin:12px 0;">
+  <h3>Mail.csv</h3>
+  <pre>id, address1, address2, city, state, zip, sent_date</pre>
+  <a class="btn" href="/static/samples/Mail_template.csv" download>Download Mail.csv template</a>
+</div>
+<div class="card" style="margin:12px 0;">
+  <h3>CRM.csv</h3>
+  <pre>crm_id, address1, address2, city, state, zip, job_date, job_value</pre>
+  <a class="btn" href="/static/samples/CRM_template.csv" download>Download CRM.csv template</a>
+</div>
+<div class="card" style="margin:12px 0;">
+  <form method="POST" enctype="multipart/form-data">
+    <label>Mail CSV</label><br><input type="file" name="mail_file" accept=".csv" required><br><br>
+    <label>CRM CSV</label><br><input type="file" name="crm_file" accept=".csv" required><br><br>
+    <button class="btn" type="submit">Run Matching</button>
+  </form>
+</div>
+{% endblock %}

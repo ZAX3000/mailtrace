@@ -1,0 +1,50 @@
+/* public/css/theme-dark.css */
+
+:root.dark {
+  /* core palette */
+  --bg:        #0b1220;   /* page background */
+  --surface:   #111827;   /* cards, panels */
+  --ink:       #e5eef9;   /* body text */
+  --muted:     #9fb2c8;   /* secondary text */
+  --line:      #233049;   /* borders/dividers */
+
+  /* brand + accent */
+  --brand:     #60a5fa;   /* headings/links in dark */
+  --accent:    #4caf6d;   /* primary CTA green (kept consistent) */
+
+  --shadow-color: 13 44 84;        /* rgb */
+  --shadow-1: 0 6px 14px rgba(var(--shadow-color)/0.18);
+  --shadow-2: 0 24px 60px rgba(var(--shadow-color)/0.22);
+}
+
+/* Optional: improve common elements in dark without touching component CSS */
+:root.dark body,
+:root.dark html {
+  background: var(--bg);
+  color: var(--ink);
+}
+
+:root.dark .mt .card,
+:root.dark .mt .section,
+:root.dark .mt .table-wrap,
+:root.dark .mt .box,
+:root.dark .mt .cardlike {
+  background: var(--surface);
+  border-color: var(--line);
+  box-shadow: var(--shadow-1);
+}
+
+:root.dark .mt th {
+  color: var(--muted);
+}
+
+:root.dark .mt td {
+  color: var(--ink);
+}
+
+:root.dark #mt-modal {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--line);
+  box-shadow: var(--shadow-2);
+}
