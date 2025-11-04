@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 import time
 from threading import Thread, Event, current_thread
-from typing import Dict, Any, List, Set, Optional, Callable, Tuple, cast
+from typing import Dict, Any, List, Set, Optional, Callable, cast
 from datetime import date, datetime
 from flask import current_app
 from flask import Flask, has_app_context

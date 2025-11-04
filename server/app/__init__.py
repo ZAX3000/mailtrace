@@ -3,11 +3,10 @@ from __future__ import annotations
 
 import os
 import logging
-import uuid
 from contextvars import ContextVar
 from typing import Optional, TYPE_CHECKING, Any
 
-from flask import Flask, send_from_directory, session, request, g
+from flask import Flask, send_from_directory
 from dotenv import load_dotenv
 
 from .config import Config

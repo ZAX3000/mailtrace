@@ -1,7 +1,7 @@
 # app/services/mapper.py
 from __future__ import annotations
 
-from typing import Tuple, Dict, Any, List, Optional, BinaryIO, Set
+from typing import Tuple, Dict, Any, List, Optional, BinaryIO, Set, IO
 import csv
 import io
 
@@ -62,12 +62,11 @@ def apply_mapping(rows: List[dict], mapping: Dict[str, Any], alias: Dict[str, Li
         out.append(canonical)
     return out
 
-def _csv_to_rows(file_stream: BinaryIO, encoding: str = "utf-8") -> List[dict]:
+def _csv_to_rows(file_stream: IO[bytes], encoding: str = "utf-8") -> List[dict]:
     """Parse a CSV stream into a list of dicts with original headers."""
-    data = file_stream.read()
-    if isinstance(data, bytes):
-        data = data.decode(encoding, errors="replace")
-    f = io.StringIO(data)
+    raw = file_stream.read()  # bytes
+    text = raw.decode(encoding, errors="replace")
+    f = io.StringIO(text)
     reader = csv.DictReader(f)
     return [dict(row) for row in reader]
 
@@ -75,11 +74,9 @@ def ingest_raw_file(
     run_id: str,
     user_id: str,
     source: str,
-    file_stream: BinaryIO,
-    filename: str,
-    *,
-    encoding: str = "utf-8",
-) -> Tuple[str, Dict[str, Any]]:
+    file_stream: IO[bytes],
+    filename: str = "",
+) -> Tuple[Dict[str, Any], List[dict]]:
     """
     Upload step: store RAW only. Never normalize here.
     Returns:
