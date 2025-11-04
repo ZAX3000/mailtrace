@@ -4,8 +4,6 @@ Revision ID: ba871d5d2dfc
 Revises:
 Create Date: 2025-11-04 09:33:06.947322
 """
-from alembic import op
-import sqlalchemy as sa
 
 revision = "ba871d5d2dfc"
 down_revision = None
