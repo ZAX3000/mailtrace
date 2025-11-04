@@ -6,7 +6,7 @@ from uuid import UUID
 
 from flask import Blueprint, jsonify, request, session, current_app
 
-from app.errors import BadRequest
+from app.errors import BadRequest, NotFound, Conflict, Unauthorized
 from app.services import pipeline
 from app.services.result import get_result as svc_get_result
 from app.services.mapper import (
@@ -105,10 +105,6 @@ def start_run(run_id: UUID):
 def run_status(run_id: UUID):
     _ = _uid()
     return jsonify(pipeline.get_status(str(run_id))), 200
-
-
-from flask import jsonify
-from app.errors import NotFound, Conflict, Unauthorized
 
 
 @api_bp.get("/runs/<uuid:run_id>/result")

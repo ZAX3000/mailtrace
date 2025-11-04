@@ -221,8 +221,10 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
         )
 
     def _none_if_empty(v):
-        if v is None: return None
-        if isinstance(v, str) and v.strip() == "": return None
+        if v is None: 
+            return None
+        if isinstance(v, str) and v.strip() == "": 
+            return None
         return v
 
     def _to_str_or_none(v):

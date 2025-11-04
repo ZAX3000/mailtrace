@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 import os
 import re
-from datetime import date, datetime
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from datetime import date
+from typing import Any, Dict, Iterable, Optional
 
 from rapidfuzz import fuzz, process
 
@@ -64,8 +64,10 @@ def _squash_ws(s: str) -> str:
 
 def _norm_token(tok: str) -> str:
     t = tok.lower().strip(".,")
-    if t in STREET_TYPES:   return STREET_TYPES[t]
-    if t in DIRECTIONALS:   return DIRECTIONALS[t]
+    if t in STREET_TYPES:   
+        return STREET_TYPES[t]
+    if t in DIRECTIONALS:   
+        return DIRECTIONALS[t]
     return t
 
 def normalize_address1(s: str) -> str:
@@ -80,22 +82,25 @@ def block_key(addr1: str) -> str:
     """
     Base block: "<first-token>|<second-initial>" to keep it tolerant.
     """
-    if not isinstance(addr1, str): return ""
+    if not isinstance(addr1, str): 
+        return ""
     toks = [t for t in _squash_ws(addr1).split() if t]
-    if not toks: return ""
+    if not toks: 
+        return ""
     first = toks[0]
     second_initial = toks[1][0] if len(toks) > 1 else ""
     return f"{first}|{second_initial}".lower()
 
-def tokens(s: str) -> List[str]:
+def tokens(s: str) -> list[str]:
     return [t for t in normalize_address1(s).split() if t]
 
-def street_type_of(tok_list: List[str]) -> Optional[str]:
-    if not tok_list: return None
+def street_type_of(tok_list: list[str]) -> Optional[str]:
+    if not tok_list: 
+        return None
     last = tok_list[-1]
     return last if last in STREET_TYPES.values() else None
 
-def directional_in(tok_list: List[str]) -> Optional[str]:
+def directional_in(tok_list: list[str]) -> Optional[str]:
     for t in tok_list:
         if t in DIRECTIONALS.values():
             return t
@@ -114,7 +119,7 @@ def address_similarity(a1: str, b1: str) -> float:
 # Canonicalization
 # -----------------------
 
-MAIL_CANON_MAP: Dict[str, List[str]] = {
+MAIL_CANON_MAP: Dict[str, list[str]] = {
     "line_no": ["line_no"],
     "source_id": ["id", "mail_id"],
     "address1": ["address1", "addr1", "address", "street", "line1"],
@@ -125,7 +130,7 @@ MAIL_CANON_MAP: Dict[str, List[str]] = {
     "sent_date": ["sent_date", "date", "mail_date"],
 }
 
-CRM_CANON_MAP: Dict[str, List[str]] = {
+CRM_CANON_MAP: Dict[str, list[str]] = {
     "line_no": ["line_no"],
     "source_id": ["crm_id", "id", "lead_id", "job_id"],
     "address1": ["address1", "addr1", "address", "street", "line1"],
@@ -137,7 +142,7 @@ CRM_CANON_MAP: Dict[str, List[str]] = {
     "job_value": ["job_value", "amount", "value", "revenue"],
 }
 
-def _canonize_row(row: Dict[str, Any], mapping: Dict[str, List[str]]) -> Dict[str, Any]:
+def _canonize_row(row: Dict[str, Any], mapping: Dict[str, list[str]]) -> Dict[str, Any]:
     """Return a new dict with canonical keys; if key missing, fill with ''."""
     lowered = {str(k).lower().strip(): v for k, v in row.items()}
     out: Dict[str, Any] = {}
@@ -153,12 +158,12 @@ def _canonize_row(row: Dict[str, Any], mapping: Dict[str, List[str]]) -> Dict[st
             out[want] = val
     return out
 
-def _prep_mail_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _prep_mail_rows(rows: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
     out = []
     for r in rows:
         c = _canonize_row(r, MAIL_CANON_MAP)
         c["_blk"]       = block_key(c.get("address1", ""))
-        c["_date"]      = c.get("sent_date", "")
+        c["_date"]      = c.get("sent_date") or None
         c["_addr_norm"] = normalize_address1(str(c.get("address1", "")))
         c["_addr_str"]  = c["_addr_norm"]  # string fed to RapidFuzz
         c["_zip5"]      = str(c.get("zip", "")).strip()[:5]
@@ -167,12 +172,12 @@ def _prep_mail_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out.append(c)
     return out
 
-def _prep_crm_rows(rows: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def _prep_crm_rows(rows: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
     out = []
     for r in rows:
         c = _canonize_row(r, CRM_CANON_MAP)
         c["_blk"]       = block_key(c.get("address1", ""))
-        c["_date"]      = c.get("job_date", "")
+        c["_date"]      = c.get("job_date") or None
         c["_addr_norm"] = normalize_address1(str(c.get("address1", "")))
         c["_addr_str"]  = c["_addr_norm"]
         c["_zip5"]      = str(c.get("zip", "")).strip()[:5]
@@ -197,10 +202,10 @@ def _bonus_adjust(score_base: int, mail_row: Dict[str, Any], crm_row: Dict[str, 
         score = min(100, score + 2)
     return score
 
-def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> List[str]:
+def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> list[str]:
     a_mail = str(mail_row.get("address1", ""))
     a_crm  = str(crm_row.get("address1", ""))
-    notes: List[str] = []
+    notes: list[str] = []
     ta, tb = tokens(a_crm), tokens(a_mail)
     st_a, st_b = street_type_of(ta), street_type_of(tb)
     if st_a != st_b and (st_a or st_b):
@@ -224,37 +229,37 @@ def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> List[str]:
 # Main API (RapidFuzz bulk)
 # -----------------------
 
-excluded_rows_collect: List[Dict[str, Any]] = []
+excluded_rows_collect: list[Dict[str, Any]] = []
 
-def _tight_block_key(base_blk: str, zip5: str) -> Tuple[str, str]:
+def _tight_block_key(base_blk: str, zip5: str) -> tuple[str, str]:
     return (base_blk or ""), (zip5 or "")
 
 def run_matching(
     mail_rows: Iterable[Dict[str, Any]],
     crm_rows:  Iterable[Dict[str, Any]],
-) -> List[Dict[str, Any]]:
+) -> list[Dict[str, Any]]:
     excluded_rows_collect.clear()
 
     mail = _prep_mail_rows(mail_rows)
     crm  = _prep_crm_rows(crm_rows)
 
-    mail_groups: Dict[str, List[Dict[str, Any]]] = {}
+    mail_groups: Dict[str, list[Dict[str, Any]]] = {}
     for m in mail:
         mail_groups.setdefault(m["_blk"], []).append(m)
 
-    mail_groups_zip: Dict[Tuple[str, str], List[Dict[str, Any]]] = {}
+    mail_groups_zip: Dict[tuple[str, str], list[Dict[str, Any]]] = {}
     if FAST_FILTERS:
         for blk, lst in mail_groups.items():
             for m in lst:
                 key = _tight_block_key(blk, m.get("_zip5", ""))
                 mail_groups_zip.setdefault(key, []).append(m)
 
-    out_rows: List[Dict[str, Any]] = []
+    out_rows: list[Dict[str, Any]] = []
 
     for c in crm:
         blk = c["_blk"]
 
-        candidates: Optional[List[Dict[str, Any]]] = None
+        candidates: Optional[list[Dict[str, Any]]] = None
         if FAST_FILTERS and c.get("_zip5"):
             candidates = mail_groups_zip.get(_tight_block_key(blk, c["_zip5"]))
             if not candidates:
@@ -288,7 +293,7 @@ def run_matching(
 
         if FAST_FILTERS:
             cz, cc, cs = c.get("_zip5", ""), c.get("_city_l", ""), c.get("_state_l", "")
-            cand_fast: List[Dict[str, Any]] = []
+            cand_fast: list[Dict[str, Any]] = []
             for m in cand:
                 # If both have zip5 and they differ => skip
                 if cz and m.get("_zip5") and cz != m["_zip5"]:
@@ -306,7 +311,7 @@ def run_matching(
 
         best: Optional[Dict[str, Any]] = None
         best_score = -1
-        best_notes: List[str] = []
+        best_notes: list[str] = []
 
         if not cand_strings:
             continue
@@ -335,7 +340,7 @@ def run_matching(
             if best:
                 best_notes = _notes_for(best, c)
 
-        prior_dates: List[date] = sorted([d for d in (m.get("_date") for m in cand) if isinstance(d, date)])
+        prior_dates: list[date] = sorted([d for d in (m.get("_date") for m in cand) if isinstance(d, date)])
         last_mail_dt = max(prior_dates) if prior_dates else None
 
         if not best:
@@ -369,7 +374,7 @@ def run_matching(
             "crm_job_date": c.get("_date"),
             "last_mail_date": last_mail_dt,
 
-            "job_value": c.get("job_value", ""),
+            "job_value": c.get("job_value") or None,
 
             "mail_id": best.get("source_id", ""),
             "mail_line_no": best.get("line_no", ""),
@@ -410,7 +415,7 @@ def persist_matches_for_run(
 ) -> int:
     raw_rows = run_matching(mail_rows, crm_rows)
 
-    transformed: List[Dict[str, Any]] = []
+    transformed: list[Dict[str, Any]] = []
     for r in raw_rows:
         transformed.append({
             **r,

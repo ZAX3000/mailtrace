@@ -130,11 +130,6 @@ class Mapping(db.Model):
 # --------------------------------------------------------------------
 # MATCHES (summary rows for UI/exports)
 # --------------------------------------------------------------------
-# app/models.py (or wherever Match lives)
-import sqlalchemy as sa
-from sqlalchemy import UniqueConstraint, Index
-from sqlalchemy.dialects.postgresql import UUID
-from app import db
 
 class Match(db.Model):
     __tablename__ = "matches"

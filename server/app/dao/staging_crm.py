@@ -228,7 +228,7 @@ def count_crm(engine: Engine) -> int:
         return int(conn.scalar(text(f"SELECT COUNT(*) FROM {TABLE}")) or 0)
 
 
-def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[str]]:
+def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, Any], set[str]]:
     """
     Build a mapping from original CSV headers to canonical names using ALIASES.
     Returns (mapping_original_to_canonical, missing_required_after_aliasing).
@@ -236,7 +236,7 @@ def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[st
     headers_list = list(in_headers)  # make indexable
     lower = [h.strip().lower() for h in headers_list]
     used: set[str] = set()
-    mapping: Dict[str, str] = {}
+    mapping: Dict[str, Any] = {}
     for canon, alts in ALIASES.items():
         for a in alts:
             if a in lower:
@@ -248,7 +248,7 @@ def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[st
     return mapping, missing
 
 
-def _resolve_canonical_to_source(headers: List[str], mapping_arg: Optional[Dict[str, Any]]) -> Dict[str, str]:
+def _resolve_canonical_to_source(headers: List[str], mapping_arg: Optional[Dict[str, Any]]) -> Dict[str, Any]:
     """
     Build canonical_name -> original_header mapping.
     Priority:
@@ -258,7 +258,7 @@ def _resolve_canonical_to_source(headers: List[str], mapping_arg: Optional[Dict[
     headers_lower = [h.strip().lower() for h in headers]
 
     if mapping_arg:
-        out: Dict[str, str] = {}
+        out: Dict[str, Any] = {}
         for canon, src in mapping_arg.items():
             if not isinstance(src, str) or not src:
                 continue
@@ -276,7 +276,7 @@ def _resolve_canonical_to_source(headers: List[str], mapping_arg: Optional[Dict[
     # fallback: alias inference (canonical <- original)
     original_to_canon, _ = _canon_header_map(headers)
     # invert to canon -> orig
-    canon_to_orig: Dict[str, str] = {}
+    canon_to_orig: Dict[str, Any] = {}
     for orig, canon in original_to_canon.items():
         # keep first seen
         canon_to_orig.setdefault(canon, orig)

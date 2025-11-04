@@ -229,7 +229,7 @@ def count_mail(engine: Engine) -> int:
         return int(conn.scalar(text(f"SELECT COUNT(*) FROM {TABLE}")) or 0)
 
 
-def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[str]]:
+def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, Any], set[str]]:
     """
     Build a mapping from original CSV headers to canonical names using ALIASES.
     Returns (mapping, missing_required_after_aliasing).
@@ -237,7 +237,7 @@ def _canon_header_map(in_headers: Iterable[str]) -> Tuple[Dict[str, str], set[st
     headers_list = list(in_headers)
     lower = [h.strip().lower() for h in headers_list]
     used: set[str] = set()
-    mapping: Dict[str, str] = {}
+    mapping: Dict[str, Any] = {}
 
     for canon, alts in ALIASES.items():
         for a in alts:

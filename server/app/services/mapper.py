@@ -1,7 +1,7 @@
 # app/services/mapper.py
 from __future__ import annotations
 
-from typing import Tuple, Dict, Any, List, Optional, Set
+from typing import Tuple, Dict, Any, List, Optional
 import csv
 import io
 
@@ -115,7 +115,5 @@ def get_mapping(run_id: str, source: str) -> Dict[str, Any]:
     return mapper_dao.get_mapping(run_id, source)
 
 def save_mapping(run_id: str, user_id: str, source: str, mapping: Dict[str, Any]) -> Dict[str, Any]:
-    required, alias = canon_for(source)
     mapper_dao.save_mapping(run_id, user_id, source, mapping)
-    hdrs = mapper_dao.get_raw_headers(run_id, source, sample=1)  # cheap existence check
     return {"ok": True, "run_id": run_id, "source": source, "mapping_saved": True}
