@@ -129,8 +129,9 @@ def update_counts(
     mail_ready: bool | None = None,
     crm_ready: bool | None = None,
 ) -> None:
-    sets = []
-    params = {"rid": str(run_id)}
+    sets: list[str] = []
+    from typing import Any, Dict
+    params: Dict[str, Any] = {"rid": str(run_id)}
     if mail_count is not None:
         sets.append("mail_count = :mail_count")
         params["mail_count"] = mail_count

@@ -1,7 +1,6 @@
 # app/blueprints/api.py
 from __future__ import annotations
 
-from typing import Any, Dict
 from uuid import UUID
 
 from flask import Blueprint, jsonify, request, session, current_app
@@ -79,13 +78,12 @@ def upload_raw(run_id: UUID, source: str):
 
 
 @api_bp.post("/runs/<uuid:run_id>/mapping")
-def save_mapping(run_id: UUID):
-    _ = _uid()
+def save_mapping_route(run_id: UUID):
+    uid = _uid()
     body = request.get_json(force=True) or {}
     source = _norm_source(body.get("source") or "mail")
     mapping = body.get("mapping") or {}
-    from json import dumps
-    out = svc_save_mapping(str(run_id), source, dumps(mapping))
+    out = svc_save_mapping(str(run_id), uid, source, mapping)
     return jsonify(out), 200
 
 

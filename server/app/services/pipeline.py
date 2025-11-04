@@ -153,7 +153,7 @@ def start_matching(run_id: str) -> None:
     run_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
     log.info("start_matching: claimed run_id=%s; spawning matcher thread", run_id)
 
-    app = cast(Flask, current_app._get_current_object())
+    app = cast(Flask, current_app)
     t = Thread(
         target=_match_and_aggregate_async,
         args=(app, run_id),
@@ -327,10 +327,9 @@ def _match_and_aggregate_async(app: Flask, run_id: str) -> None:
             _tick(run_id, "kpi", pct=96, msg="Computing KPIs")
             t1 = time.time()
             try:
-                payload = summary.build_payload(
-                    run_id,
-                    on_progress=lambda label, pct=None, msg=None: _tick(run_id, label, pct=pct, msg=msg),
-                )
+                def _progress(label: str, pct: Optional[int] = None, msg: Optional[str] = None) -> None:
+                    _tick(run_id, label, pct=pct, msg=msg)
+                payload = summary.build_payload(run_id, on_progress=_progress)
             except TypeError:
                 log.debug("matcher: summary.build_payload has legacy signature; continuing without on_progress")
                 payload = summary.build_payload(run_id)
