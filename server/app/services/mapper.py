@@ -44,7 +44,7 @@ def _first_present(row: dict, names: List[str]) -> Optional[str]:
             return row[n]
     return None
 
-def apply_mapping(rows: List[dict], mapping: Dict[str, str], alias: Dict[str, List[str]]) -> List[dict]:
+def apply_mapping(rows: List[dict], mapping: Dict[str, Any], alias: Dict[str, List[str]]) -> List[dict]:
     """Rename columns to canonical keys using explicit mapping first, then alias fallbacks."""
     out: List[dict] = []
     for r in rows:

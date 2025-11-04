@@ -1,7 +1,7 @@
 # app/dao/matches_dao.py
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional, Any
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -176,7 +176,7 @@ def fetch_for_run(run_id: str, user_id: Optional[str] = None) -> List[Dict]:
         FROM matches
         WHERE run_id = :run_id
     """
-    params: Dict[str, object] = {"run_id": run_id}
+    params: Dict[str, Any] = {"run_id": run_id}
     if user_id:
         base_sql += " AND user_id = :user_id"
         params["user_id"] = user_id

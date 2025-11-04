@@ -132,16 +132,16 @@ def update_counts(
     sets = []
     params = {"rid": str(run_id)}
     if mail_count is not None:
-        sets.append("mail_count = :mail_count"); 
+        sets.append("mail_count = :mail_count")
         params["mail_count"] = mail_count
     if crm_count is not None:
-        sets.append("crm_count = :crm_count"); 
+        sets.append("crm_count = :crm_count")
         params["crm_count"] = crm_count
     if mail_ready is not None:
-        sets.append("mail_ready = :mail_ready"); 
+        sets.append("mail_ready = :mail_ready") 
         params["mail_ready"] = mail_ready
     if crm_ready is not None:
-        sets.append("crm_ready = :crm_ready"); 
+        sets.append("crm_ready = :crm_ready")
         params["crm_ready"] = crm_ready
     if sets:
         db.session.execute(text(f"UPDATE runs SET {', '.join(sets)} WHERE id = :rid"), params)
