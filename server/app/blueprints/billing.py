@@ -35,7 +35,7 @@ def checkout() -> ResponseReturnValue:
     email: Optional[str] = cast(Optional[str], session.get("email"))
 
     try:
-        session_obj = stripe.checkout.Session.create(  # type: ignore[no-redef]
+        session_obj = stripe.checkout.Session.create(
             mode="subscription",
             customer_email=email,
             line_items=[
@@ -64,7 +64,7 @@ def webhook() -> ResponseReturnValue:
 
     try:
         # Construct and verify event
-        event = stripe.Webhook.construct_event(payload, sig, whsec)  # type: ignore[no-redef]
+        event = stripe.Webhook.construct_event(payload, sig, whsec)
     except Exception as e:
         current_app.logger.warning("Stripe webhook signature/parse failed: %s", e)
         return jsonify({"error": "invalid_signature"}), 400
@@ -127,7 +127,7 @@ def _handle_checkout_completed(data: dict[str, Any]) -> None:
 
     # Retrieve subscription to find the metered item id
     try:
-        subscription = stripe.Subscription.retrieve(subscription_id)  # type: ignore[no-redef]
+        subscription = stripe.Subscription.retrieve(subscription_id)
         items = getattr(subscription, "items", None)
         data_list = getattr(items, "data", []) if items is not None else []
         metered_price = current_app.config.get("STRIPE_PRICE_METERED")

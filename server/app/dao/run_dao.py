@@ -180,3 +180,32 @@ def get_pair_counts(run_id: str) -> Tuple[int, int]:
         {"id": str(run_id)},
     ).scalar_one()
     return int(mail_rows), int(crm_rows)
+
+# ---- latest run lookups -----------------------------------------------------
+
+def latest_for_user(user_id: str, only_done: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    Return the most recent run for a user.
+    If only_done=True, return the most recent *completed* run.
+    """
+    sql = """
+        SELECT
+          id::text      AS run_id,
+          user_id::text AS user_id,
+          step, pct, message, status,
+          started_at, finished_at
+        FROM runs
+        WHERE user_id = :u
+        {and_done}
+        ORDER BY
+          -- prefer completed runs by finished_at desc; otherwise by started_at
+          (finished_at IS NULL), finished_at DESC NULLS LAST, started_at DESC
+        LIMIT 1
+    """
+    and_done = "AND status = 'done'" if only_done else ""
+    row = db.session.execute(text(sql.format(and_done=and_done)), {"u": str(user_id)}).mappings().first()
+    return dict(row) if row else None
+
+def latest_done_for_user(user_id: str) -> Optional[Dict[str, Any]]:
+    """Shorthand for latest_for_user(user_id, only_done=True)."""
+    return latest_for_user(user_id, only_done=True)

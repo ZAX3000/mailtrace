@@ -71,7 +71,7 @@ def upload_raw(run_id: UUID, source: str):
         raise BadRequest("missing file")
 
     # Parse CSV and store RAW rows (JSONB) only
-    _fname, payload = svc_ingest_raw_file(
+    payload = svc_ingest_raw_file(
         str(run_id), uid, source, f.stream, filename=f.filename or ""
     )
     return jsonify(payload), 201
@@ -96,7 +96,8 @@ def start_run(run_id: UUID):
     if missing:
         return jsonify({"message": "Mapping required", "missing": missing}), 409
 
-    pipeline.start_pipeline(str(run_id), uid)
+    flask_app = current_app._get_current_object()
+    pipeline.start_pipeline(str(run_id), uid, flask_app)
     return jsonify({"ok": True}), 202
 
 
@@ -118,6 +119,20 @@ def run_result(run_id: UUID):
     except Conflict as e:
         return jsonify({"error": str(e)}), 409
 
+@api_bp.get("/runs/latest")
+def latest_run():
+    """
+    Return the user's latest run snapshot.
+    If you pass ?require=done, only return a completed run.
+    200 with JSON if found, 204 if none.
+    """
+    uid = _uid()
+    require = (request.args.get("require") or "").strip().lower()
+    only_done = require in {"done", "completed", "finished", "true", "1", "yes"}
+    rec = pipeline.latest_run_for_user(uid, only_done=only_done)
+    if not rec:
+        return ("", 204)
+    return jsonify(rec), 200
 
 # -----------------------
 # Mapper utilities
