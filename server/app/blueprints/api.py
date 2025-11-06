@@ -3,7 +3,8 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from flask import Blueprint, jsonify, request, session, current_app
+from typing import cast
+from flask import Blueprint, jsonify, request, session, current_app, Flask
 
 from app.errors import BadRequest, NotFound, Conflict, Unauthorized
 from app.services import pipeline
@@ -31,7 +32,7 @@ def _ensure_dev_session_user() -> None:
         return
     if "user_id" in session:
         return
-    from app.blueprints.auth import _ensure_dev_user  # lazy to avoid cycles
+    from app.blueprints.auth import _ensure_dev_user
     u = _ensure_dev_user()
     session["user_id"] = str(u.id)
     session["email"] = u.email
@@ -40,7 +41,6 @@ def _uid() -> str:
     _ensure_dev_session_user()
     uid = session.get("user_id")
     if not uid:
-        # If auth is enabled and there's no user, treat as bad request for now.
         raise BadRequest("missing session user")
     return str(uid)
 
@@ -70,7 +70,6 @@ def upload_raw(run_id: UUID, source: str):
     if not f:
         raise BadRequest("missing file")
 
-    # Parse CSV and store RAW rows (JSONB) only
     payload = svc_ingest_raw_file(
         str(run_id), uid, source, f.stream, filename=f.filename or ""
     )
@@ -91,12 +90,11 @@ def save_mapping_route(run_id: UUID):
 def start_run(run_id: UUID):
     uid = _uid()
 
-    # fail fast on mapping gaps
     missing = pipeline.check_mapping_readiness(str(run_id))
     if missing:
         return jsonify({"message": "Mapping required", "missing": missing}), 409
 
-    flask_app = current_app._get_current_object()
+    flask_app = cast(Flask, getattr(current_app, "_get_current_object")())
     pipeline.start_pipeline(str(run_id), uid, flask_app)
     return jsonify({"ok": True}), 202
 
