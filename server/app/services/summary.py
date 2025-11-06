@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable, List, Tuple, Optional, Callable, TypedDict
 from collections import defaultdict
-from datetime import date, datetime
+from datetime import date
 
 from app.dao import staging_dao, matches_dao, result_dao
 from app.services.matching import normalize_address1
@@ -38,17 +38,6 @@ def _median(values: List[int]) -> float:
     n = len(s)
     mid = n // 2
     return float(s[mid]) if n % 2 == 1 else (s[mid - 1] + s[mid]) / 2.0
-
-def _parse_mm_dd_yy(s: Any) -> date | None:
-    if not isinstance(s, str) or not s.strip():
-        return None
-    try:
-        parts = s.strip().split("-")
-        if len(parts) == 3 and len(parts[2]) == 2:
-            return datetime.strptime(s.strip(), "%m-%d-%y").date()
-        return datetime.strptime(s.strip(), "%m-%d-%Y").date()
-    except Exception:
-        return None
 
 # ---------- KPI & series helpers (from staging) ----------
 
@@ -123,11 +112,10 @@ def _yoy_overlay(series_by_month: Dict[str, int]) -> YoYOverlay:
     prev    = [int(series_by_month.get(f"{prv}-{m:02d}", 0)) for m in range(1, 13)]
     return {"months": months_labels, "current": current, "prev": prev}
 
-# ---------- Core: build + persist via result_dao ----------
+# ---------- Core compute (no persistence) ----------
 
-def build_and_store(
+def compute_payload(
     run_id: str,
-    user_id: Optional[str] = None,
     on_progress: Optional[Callable[[str, Optional[int], Optional[str]], None]] = None,
 ) -> Dict[str, Any]:
     def _p(label: str, pct: Optional[int] = None, msg: Optional[str] = None) -> None:
@@ -136,10 +124,6 @@ def build_and_store(
                 on_progress(label, pct, msg)
         except Exception:
             pass
-
-    # Resolve user_id if not provided (uses helper in result_dao)
-    if not user_id:
-        user_id = getattr(result_dao, "_resolve_user_id_for_run", lambda rid: None)(run_id) or ""
 
     # 1) Load rows
     _p("fetch", 91, "Fetching normalized + matches")
@@ -209,8 +193,8 @@ def build_and_store(
     top_zips_rows: List[Dict[str, Any]] = [{"zip": z, "matches": int(cnt)}  # <-- 'zip' to match result_dao.save_all
                                            for z, cnt in sorted(zip_counts.items(), key=lambda kv: kv[1], reverse=True)]
 
-    # 6) Persist via result_dao (single place for stats IO)
-    payload = {
+    # 6) Build payload object (front-end consumes this)
+    return {
         "kpis": {
             "total_mail": total_mail_lines,
             "unique_mail_addresses": unique_mail_addresses,
@@ -228,16 +212,25 @@ def build_and_store(
         "run_id": run_id,
     }
 
-    _p("store", 98, "Persisting KPIs/series/tops")
-    result_dao.save_all(run_id, user_id, payload)
-
-    _p("finalize", 99, "Finalizing payload")
+# ---------- Optional: materialize (legacy/batch only) ----------
+def build_and_store(
+    run_id: str,
+    user_id: Optional[str] = None,
+    on_progress: Optional[Callable[[str, Optional[int], Optional[str]], None]] = None,
+) -> Dict[str, Any]:
+    # Resolve user_id if not provided (uses helper in result_dao)
+    if not user_id:
+        user_id = getattr(result_dao, "_resolve_user_id_for_run", lambda rid: None)(run_id) or ""
+    payload = compute_payload(run_id, on_progress=on_progress)
+    # Persist via result_dao (single place for stats IO)
+    if hasattr(result_dao, "save_all"):
+        result_dao.save_all(run_id, user_id, payload)
     return payload
-
 
 # Backward-compatible entry point (pipeline calls this)
 def build_payload(
     run_id: str,
     on_progress: Optional[Callable[[str, Optional[int], Optional[str]], None]] = None,
 ) -> Dict[str, Any]:
-    return build_and_store(run_id=run_id, user_id=None, on_progress=on_progress)
+    # Compute-only; no writes (safe to call from GET /result)
+    return compute_payload(run_id, on_progress=on_progress)

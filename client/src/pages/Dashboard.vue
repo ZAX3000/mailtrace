@@ -1,11 +1,11 @@
-<!-- client/src/pages/Dashboard.vue -->
 <script setup lang="ts">
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import ModalUploadGuard from '@/components/ModalUploadGuard.vue'
 import ModalMappingRequired from '@/components/ModalMappingRequired.vue'
-import { useUploadGuard } from '@/composables/useUploadGuard'
 import UploadCard from '@/components/UploadCard.vue'
+import KpiSummaryCard from '@/components/KpiSummaryCard.vue'
+import { useUploadGuard } from '@/composables/useUploadGuard'
 import { useLoader } from '@/stores/loader'
 
 declare global {
@@ -26,6 +26,9 @@ useUploadGuard(() => (showUploadGuard.value = true))
 // Mapping modal state
 const showMapping = ref(false)
 const missing = ref<Record<string, string[]>>({})
+
+// expose run id for KPI component
+const runId = ref<string>('')
 
 // ---- UI handlers ------------------------------------------------------------
 
@@ -58,9 +61,19 @@ onMounted(async () => {
 
   const onRunCompleted = (e: any) => {
     console.info('EVT mt:run-completed', e?.detail)
-    // Manual-only policy: don’t auto-hide, just mark done
+    // Update loader
     loader.setProgress(100)
     loader.setMessage('Run complete')
+    // Push the finished run id so KPI card can fetch /result
+    const id = e?.detail?.run_id as string | undefined
+    if (id) {
+      runId.value = id
+      // reflect in global ctx for legacy consumers
+      window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: id }
+      // make the URL shareable/bookmarkable
+      const q = { ...route.query, run_id: id }
+      router.replace({ path: route.path, query: q })
+    }
   }
 
   const onOpenMapper = (e: any) => {
@@ -80,12 +93,11 @@ onMounted(async () => {
   ;(window as any).__onRunCompleted = onRunCompleted
   ;(window as any).__onOpenMapper = onOpenMapper
 
-  // Initialize run id in URL + MT_CONTEXT
-  const runId = (route.query.run_id as string) || ''
-  if (runId && route.query.run_id !== runId) {
-    router.replace({ path: route.path, query: { ...route.query, run_id: runId } })
+  const qRunId = (route.query.run_id as string) || ''
+  if (qRunId) {
+    window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: qRunId }
+    runId.value = qRunId
   }
-  window.MT_CONTEXT = { ...(window.MT_CONTEXT || {}), run_id: runId }
 
   // DEBUG console hooks
   ;(window as any).MT_DEBUG = {
@@ -94,7 +106,7 @@ onMounted(async () => {
     lock: () => loader.lock(),
     unlock: () => loader.unlock(),
     openMapper: (miss = {}) =>
-      window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id: runId, missing: miss } })),
+      window.dispatchEvent(new CustomEvent('mt:open-mapper', { detail: { run_id: qRunId, missing: miss } })),
   }
 })
 
@@ -120,22 +132,16 @@ onBeforeUnmount(() => {
         @mapping-required="onMappingRequired"
       />
 
-      <!-- KPI bar -->
-      <div
-        class="card row"
+      <!-- KPI bar (Vue component, preserves legacy look/spacing via id/class/style) -->
+      <KpiSummaryCard
         id="cmp-kpis"
+        class="card row"
         style="flex:3 1 520px; min-width:320px; align-items:center; justify-content:space-around"
-      >
-        <div class="kpi"><div class="v" data-kpi="mail"></div><div class="l">Total Mail</div></div>
-        <div class="kpi"><div class="v" data-kpi="uniqmail"></div><div class="l">Unique Mail Addresses</div></div>
-        <div class="kpi"><div class="v" data-kpi="crm"></div><div class="l">Total Jobs</div></div>
-        <div class="kpi"><div class="v" data-kpi="matches"></div><div class="l">Matches</div></div>
-        <div class="kpi"><div class="v" data-kpi="rate"></div><div class="l">Match Rate</div></div>
-        <div class="kpi"><div class="v" data-kpi="revenue"></div><div class="l">Match Revenue</div></div>
-      </div>
+        :run-id="runId"
+      />
     </div>
 
-    <!-- Chart -->
+    <!-- Chart (legacy for now) -->
     <div class="section card" id="cmp-graph">
       <div class="yoy yoy-btn">
         <label><input id="yoyToggle" type="checkbox" checked> Show YoY overlay</label>
@@ -143,7 +149,7 @@ onBeforeUnmount(() => {
       <canvas id="chart" width="1000" height="260"></canvas>
     </div>
 
-    <!-- Top lists -->
+    <!-- Top lists (legacy for now) -->
     <div class="row section" id="cmp-top">
       <div class="card" style="flex:1 1 360px">
         <div style="font-weight:600;margin-bottom:8px">Top Cities</div>
@@ -170,7 +176,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
 
-    <!-- Summary table -->
+    <!-- Summary table (legacy for now) -->
     <div class="section card" id="cmp-summary">
       <div style="font-weight:600;margin-bottom:8px">Summary</div>
       <div class="table-wrap">

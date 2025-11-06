@@ -4,9 +4,8 @@ from __future__ import annotations
 import logging
 import time
 from threading import Thread, Event, current_thread
-from typing import Dict, Any, List, Set, Optional, Callable, cast
+from typing import Dict, Any, List, Set, Optional, Callable
 from datetime import date, datetime
-from flask import current_app
 from flask import Flask, has_app_context
 
 from app.dao import run_dao, staging_dao, mapper_dao
@@ -116,9 +115,22 @@ def get_status(run_id: str) -> Dict[str, Any]:
     log.debug("get_status(%s) -> %s", run_id, out)
     return out
 
+def latest_run_for_user(user_id: str, only_done: bool = False) -> Optional[Dict[str, Any]]:
+    """
+    Service wrapper around DAO so the API layer doesn't import DAOs directly.
+    Returns a dict like status() or None.
+    """
+    try:
+        return run_dao.latest_for_user(user_id, only_done=only_done)
+    except TypeError:
+        # Back-compat shim if older DAO exposes a different split API
+        if only_done and hasattr(run_dao, "latest_done_for_user"):
+            return run_dao.latest_done_for_user(user_id)
+        return None
+
 # -------- Orchestration entrypoint --------
 
-def start_pipeline(run_id: str, user_id: str) -> None:
+def start_pipeline(run_id: str, user_id: str, flask_app: Flask) -> None:
     mark_start(run_id)
 
     _set(run_id, "normalizing_mail")
@@ -134,11 +146,11 @@ def start_pipeline(run_id: str, user_id: str) -> None:
     if not run_dao.pair_ready(run_id):
         _fail(run_id, msg="Staging not ready after normalization (internal consistency error).")
 
-    start_matching(run_id)
+    start_matching(run_id, flask_app)
 
 # -------- Matching launcher (service-layer, uses DAO for persistence) --------
 
-def start_matching(run_id: str) -> None:
+def start_matching(run_id: str, flask_app: Flask) -> None:
     meta = run_dao.status(run_id) or {}
     current = (meta or {}).get("status")
 
@@ -153,10 +165,9 @@ def start_matching(run_id: str) -> None:
     run_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
     log.info("start_matching: claimed run_id=%s; spawning matcher thread", run_id)
 
-    app = cast(Flask, current_app)
     t = Thread(
         target=_match_and_aggregate_async,
-        args=(app, run_id),
+        args=(flask_app, run_id),
         daemon=True,
         name=f"mt-match-{run_id}",
     )
