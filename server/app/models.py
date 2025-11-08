@@ -3,8 +3,8 @@ from __future__ import annotations
 
 from datetime import datetime
 import sqlalchemy as sa
-from sqlalchemy import Index, CheckConstraint, text, func, UniqueConstraint, PrimaryKeyConstraint, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy import Index, CheckConstraint, text, func, PrimaryKeyConstraint, ForeignKey
+from sqlalchemy.dialects.postgresql import UUID, JSONB, ARRAY
 from .extensions import db
 
 # --------------------------------------------------------------------
@@ -139,13 +139,17 @@ class Match(db.Model):
     run_id  = db.Column(UUID(as_uuid=True), db.ForeignKey("runs.id"), nullable=False)
     user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("users.id"), nullable=False)
 
-    # exact pair (line numbers from staging tables)
-    crm_line_no  = db.Column(sa.BigInteger, nullable=False)
-    mail_line_no = db.Column(sa.BigInteger, nullable=False)
+    # CRM traceability
+    crm_line_no = db.Column(sa.BigInteger, nullable=False)
 
-    # traceability (renamed to match DAO)
-    crm_id  = db.Column(sa.Text)   # was crm_source_id
-    mail_id = db.Column(sa.Text)   # was mail_source_id
+    # Job identity + external ids
+    crm_id    = db.Column(sa.Text)        # optional external id
+    job_index = db.Column(sa.Text)        # our canonical job key (preferred)
+
+    # ── Mail “many” context ───────────────────────────────────────────
+    # store all mailers that qualify for the job; plus a representative date
+    mail_ids            = db.Column(ARRAY(sa.Text))       # replaces scalar mail_id
+    matched_mail_dates  = db.Column(ARRAY(sa.Date))       # all qualifying mail dates
 
     # CRM denorm
     crm_job_date = db.Column(sa.Date)
@@ -153,12 +157,10 @@ class Match(db.Model):
     crm_city     = db.Column(sa.String)
     crm_state    = db.Column(sa.String(2))
     crm_zip      = db.Column(sa.String)
+    crm_full_address = db.Column(sa.Text)
 
-    # Mail context (winner + window)
-    mail_full_address     = db.Column(sa.Text)
-    crm_full_address      = db.Column(sa.Text)
-    mail_count_in_window  = db.Column(sa.Integer)
-    last_mail_date        = db.Column(sa.Date)
+    # Mail context (kept for display)
+    mail_full_address = db.Column(sa.Text)
 
     # scoring/notes
     confidence_percent = db.Column(sa.Integer)
@@ -169,14 +171,13 @@ class Match(db.Model):
     state = db.Column(sa.String(2))
 
     __table_args__ = (
-        # Keep your uniqueness rules
-        UniqueConstraint("run_id", "crm_line_no", "mail_line_no", name="uq_match_pair"),
-        UniqueConstraint("run_id", "crm_line_no", name="uq_match_one_mail_per_crm"),
-        Index("idx_matches_user", "user_id"),
-        Index("idx_matches_run", "run_id"),
-        Index("idx_matches_user_date", "user_id", "crm_job_date"),
-        Index("idx_matches_zip5", "zip5"),
-        Index("idx_matches_state", "state"),
+        # And enforce one summary row per job in a run (covers dedupe-by-job_index)
+        sa.UniqueConstraint("user_id", "job_index", name="uq_matches_per_job"),
+        sa.Index("idx_matches_user", "user_id"),
+        sa.Index("idx_matches_run", "run_id"),
+        sa.Index("idx_matches_user_date", "user_id", "crm_job_date"),
+        sa.Index("idx_matches_zip5", "zip5"),
+        sa.Index("idx_matches_state", "state"),
     )
 
 
@@ -323,21 +324,22 @@ class StagingMail(db.Model):
     __tablename__ = "staging_mail"
 
     # NOTE: 'id' is TEXT (caller-supplied); no sequence here
-    id         = db.Column(sa.Text, nullable=True)
-    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
-    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    id              = db.Column(sa.Text, nullable=True)
+    run_id          = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id         = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
 
-    address1   = db.Column(sa.Text)
-    address2   = db.Column(sa.Text)
-    city       = db.Column(sa.Text)
-    state      = db.Column(sa.Text)
-    zip        = db.Column(sa.Text)
+    address1        = db.Column(sa.Text)
+    address2        = db.Column(sa.Text)
+    city            = db.Column(sa.Text)
+    state           = db.Column(sa.Text)
+    zip             = db.Column(sa.Text)
+    full_address    = db.Column(sa.Text)
 
-    sent_date  = db.Column(sa.Date)  # normalized to DATE upstream
-    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+    sent_date       = db.Column(sa.Date)  # normalized to DATE upstream
+    created_at      = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
 
     # Composite PK: (run_id, line_no) with explicit sequence
-    line_no    = db.Column(
+    line_no         = db.Column(
         sa.BigInteger,
         server_default=STAGING_MAIL_LINE_NO_SEQ.next_value(),
         nullable=False,
@@ -353,22 +355,25 @@ class StagingCrm(db.Model):
     __tablename__ = "staging_crm"
 
     # Keep a numeric 'id' if you want, but NOT as primary key (PK is composite below)
-    id         = db.Column(sa.BigInteger, nullable=True)
+    id              = db.Column(sa.BigInteger, nullable=True)
 
-    run_id     = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
-    user_id    = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
-
-    crm_id     = db.Column(sa.Text)
-    address1   = db.Column(sa.Text)
-    address2   = db.Column(sa.Text)
-    city       = db.Column(sa.Text)
-    state      = db.Column(sa.Text)
-    zip        = db.Column(sa.Text)
-    job_date   = db.Column(sa.Date)
-    job_value  = db.Column(sa.Numeric(12, 2))
-    created_at = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
-
-    line_no    = db.Column(
+    run_id          = db.Column(UUID(as_uuid=True), ForeignKey("runs.id"), nullable=False)
+    user_id         = db.Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    
+    crm_id          = db.Column(sa.Text)
+    job_index       = db.Column(sa.Text)
+    
+    address1        = db.Column(sa.Text)
+    address2        = db.Column(sa.Text)
+    city            = db.Column(sa.Text)
+    state           = db.Column(sa.Text)
+    zip             = db.Column(sa.Text)
+    full_address    = db.Column(sa.Text)
+    job_date        = db.Column(sa.Date)
+    job_value       = db.Column(sa.Numeric(12, 2))
+    created_at      = db.Column(sa.TIMESTAMP, server_default=sa.text("now()"), nullable=True)
+    
+    line_no         = db.Column(
         sa.BigInteger,
         server_default=STAGING_CRM_LINE_NO_SEQ.next_value(),
         nullable=False,

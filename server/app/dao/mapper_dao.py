@@ -186,9 +186,9 @@ def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]
     tbl = _tbl_norm("mail")
     stmt = text(f"""
         INSERT INTO {tbl}
-          (run_id, user_id, source_id, address1, address2, city, state, zip, sent_date)
+          (run_id, user_id, source_id, address1, address2, city, state, zip, sent_date, full_address)
         VALUES
-          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :sent_date)
+          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :sent_date, :full_address)
     """)
 
     payload = []
@@ -196,13 +196,14 @@ def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "source_id": _extract_source_id(r),  # <-- always present key, may be None
+            "source_id": _extract_source_id(r),
             "address1": (r.get("address1") or "").strip(),
             "address2": (r.get("address2") or "").strip(),
             "city": (r.get("city") or "").strip(),
             "state": (r.get("state") or "").strip(),
             "zip": (r.get("zip") or "").strip(),
             "sent_date": (r.get("sent_date") or None),
+            "full_address": (r.get("full_address") or "").strip(),
         })
 
     clear_normalized(run_id, "mail")
@@ -219,9 +220,9 @@ def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]])
     tbl = _tbl_norm("crm")
     stmt = text(f"""
         INSERT INTO {tbl}
-          (run_id, user_id, source_id, address1, address2, city, state, zip, job_date, job_value)
+        (run_id, user_id, source_id, job_index, address1, address2, city, state, zip, job_date, job_value, full_address)
         VALUES
-          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :job_date, :job_value)
+        (:rid, :uid, :source_id, :job_index, :address1, :address2, :city, :state, :zip, :job_date, :job_value, :full_address)
     """)
 
     payload = []
@@ -233,7 +234,8 @@ def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]])
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "source_id": _extract_source_id(r),  # <-- unified handling
+            "source_id": _extract_source_id(r),
+            "job_index": r.get("job_index"),             # <-- NEW
             "address1": (r.get("address1") or "").strip(),
             "address2": (r.get("address2") or "").strip(),
             "city": (r.get("city") or "").strip(),
@@ -241,6 +243,7 @@ def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]])
             "zip": (r.get("zip") or "").strip(),
             "job_date": (r.get("job_date") or None),
             "job_value": job_val,
+            "full_address": (r.get("full_address") or "").strip(),
         })
 
     clear_normalized(run_id, "crm")
