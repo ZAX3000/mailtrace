@@ -1,6 +1,6 @@
 # app/dao/kpi_dao.py
 from __future__ import annotations
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple, Mapping
 from sqlalchemy import text
 from app.extensions import db
 
@@ -38,11 +38,11 @@ def _assert_ident(table: str, cols: Sequence[str]) -> None:
 def _distinct_tuple(cols: Sequence[str]) -> str:
     return "(" + ", ".join(cols) + ")"
 
-def _where_clause(table: str, filters: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
-    _assert_ident(table, filters.keys())
+def _where_clause(table: str, filters: Mapping[str, Any]) -> Tuple[str, Dict[str, Any]]:
+    _assert_ident(table, list(filters))
     parts = [f"{k} = :{k}" for k in filters.keys()]
     sql = " WHERE " + " AND ".join(parts) if parts else ""
-    return sql, filters
+    return sql, dict(filters)
 
 # ---------- Generic shapes ----------
 
@@ -82,7 +82,7 @@ def fetch_deduped_matches(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
     to match prior behavior. (Switch to MIN() if you prefer 'earliest mailer'.)
     """
     table = "matches"
-    _assert_ident(table, filters.keys())
+    _assert_ident(table, list(filters))
     where_sql, params = _where_clause(table, filters)
 
     and_or_where = " AND " if where_sql else " WHERE "
