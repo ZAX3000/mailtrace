@@ -224,14 +224,11 @@ def run_matching(
         full_mail = _mt_clean(best.get("full_address", ""))
         full_crm  = _mt_clean(c.get("full_address", ""))
 
-        # job identity: prefer CRM-provided job_index (set in pipeline), fallback to source_id if present
-        job_index = (c.get("job_index") or c.get("source_id") or "").strip() or None
-
         row = {
             # CRM side
             "crm_line_no": c.get("line_no", ""),
             "crm_id": c.get("source_id", ""),
-            "job_index": job_index,
+            "job_index": (c.get("job_index") or None),
             "crm_address1": c.get("address1", ""),
             "crm_address2": c.get("address2", ""),
             "crm_city": c.get("city", ""),

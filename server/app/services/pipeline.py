@@ -290,9 +290,12 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
             r["full_address"] = build_full_address(
                 r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
             )
-
-        rows_for_db = [dict(r, source_id=_to_str_or_none(r.get("source_id") or r.get("id"))) for r in normalized]
-
+        rows_for_db = []
+        for r in normalized:
+            rows_for_db.append(dict(
+                r,
+                source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
+            ))
         _set(run_id, "mail_inserting")
         count = mapper_dao.insert_normalized_mail(run_id, user_id, rows_for_db)
         log.info("normalize_from_raw: inserted %d rows into staging_mail", count)
@@ -310,9 +313,11 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
             r["full_address"] = build_full_address(
                 r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
             )
-
-            src_id = r.get("source_id") or r.get("id")
-            r["job_index"] = build_job_index(src_id, r.get("full_address"), r.get("job_date"))
+            r["job_index"] = build_job_index(
+                r.get("source_id") or r.get("id"),
+                r.get("full_address"),
+                r.get("job_date"),
+            )
 
             if not r["job_index"]:
                 r["_skip"] = True

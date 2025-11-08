@@ -77,63 +77,54 @@ def series_count_distinct_by_month(
 
 def fetch_deduped_matches(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Returns one row per MATCHED JOB (deduped).
-    Preferred identity: job_index; else crm_id; else (crm_full_address | crm_job_date).
-    Exposes fields for revenue, timeline (derived from matched_mail_dates[]), and city/zip rollups.
+    One row per matched JOB, keyed strictly by job_index.
+    We still expose a scalar matched_mail_date by collapsing the array; keep MAX()
+    to match prior behavior. (Switch to MIN() if you prefer 'earliest mailer'.)
     """
     table = "matches"
-    _assert_ident(table, ["run_id"])  # typical filter key
+    _assert_ident(table, filters.keys())
     where_sql, params = _where_clause(table, filters)
 
-    # Derive a scalar matched_mail_date from the array using MAX(UNNEST(...))
+    and_or_where = " AND " if where_sql else " WHERE "
     sql = f"""
     WITH raw AS (
       SELECT
-        COALESCE(
-          job_index::text,
-          crm_id::text,
-          CONCAT_WS('|', crm_full_address, COALESCE(crm_job_date::text, ''))
-        ) AS job_key,
-        job_index,
-        job_value,
-        crm_job_date,
-        (
-          SELECT MAX(d) FROM UNNEST(m.matched_mail_dates) AS t(d)
-        ) AS matched_mail_date,
-        LOWER(TRIM(crm_city)) AS crm_city,
-        COALESCE(zip5, crm_zip) AS zip5
+        m.job_index::text   AS job_key,
+        m.job_index         AS job_index,
+        m.job_value         AS job_value,
+        m.crm_job_date      AS crm_job_date,
+        (SELECT MAX(d) FROM UNNEST(m.matched_mail_dates) AS t(d)) AS matched_mail_date,
+        LOWER(TRIM(m.crm_city)) AS crm_city,
+        COALESCE(m.zip5, m.crm_zip) AS zip5
       FROM matches m
-      {where_sql}
+      {where_sql}{and_or_where} m.job_index IS NOT NULL
     )
-    SELECT job_key,
-           MAX(job_index)        AS job_index,
-           MAX(job_value)        AS job_value,
-           MAX(crm_job_date)     AS crm_job_date,
+    SELECT job_key                AS job_index,
+           MAX(job_value)         AS job_value,
+           MAX(crm_job_date)      AS crm_job_date,
            MAX(matched_mail_date) AS matched_mail_date,
-           MAX(crm_city)         AS crm_city,
-           MAX(zip5)             AS zip5
+           MAX(crm_city)          AS crm_city,
+           MAX(zip5)              AS zip5
     FROM raw
     GROUP BY job_key
     """
     res = db.session.execute(text(sql), params)
     return [dict(row._mapping) for row in res]
 
+
 def series_deduped_matches_by_month(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
-    Monthly count of deduped matched jobs, bucketing by crm_job_date.
-    Uses job_index as primary identity when available.
+    Monthly count of deduped matched jobs, bucketing by crm_job_date,
+    keyed strictly by job_index.
     """
     where_sql, params = _where_clause("matches", filters)
+    and_or_where = " AND " if where_sql else " WHERE "
     sql = f"""
     WITH d AS (
-      SELECT COALESCE(
-               job_index::text,
-               crm_id::text,
-               CONCAT_WS('|', crm_full_address, COALESCE(crm_job_date::text, ''))
-             ) AS job_key,
-             crm_job_date
-      FROM matches
-      {where_sql}
+      SELECT m.job_index::text AS job_key,
+             m.crm_job_date    AS crm_job_date
+      FROM matches m
+      {where_sql}{and_or_where} m.job_index IS NOT NULL
     ),
     one_per_job AS (
       SELECT job_key, MAX(crm_job_date) AS crm_job_date

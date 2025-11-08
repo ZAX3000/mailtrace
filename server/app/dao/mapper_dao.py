@@ -212,44 +212,57 @@ def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]
     return len(rows)
 
 
-def insert_normalized_crm(run_id: str, user_id: str, rows: List[Dict[str, Any]]) -> int:
-    if not rows:
-        clear_normalized(run_id, "crm")
-        return 0
 
-    tbl = _tbl_norm("crm")
-    stmt = text(f"""
-        INSERT INTO {tbl}
-        (run_id, user_id, source_id, job_index, address1, address2, city, state, zip, job_date, job_value, full_address)
-        VALUES
-        (:rid, :uid, :source_id, :job_index, :address1, :address2, :city, :state, :zip, :job_date, :job_value, :full_address)
-    """)
+def insert_normalized_crm(run_id: str, user_id: str, rows: list[dict]) -> int:
+    if not rows:
+        return 0
 
     payload = []
     for r in rows:
-        job_val = r.get("job_value")
-        if isinstance(job_val, str):
-            job_val = job_val.strip() or None
-
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "source_id": _extract_source_id(r),
-            "job_index": r.get("job_index"),             # <-- NEW
-            "address1": (r.get("address1") or "").strip(),
-            "address2": (r.get("address2") or "").strip(),
-            "city": (r.get("city") or "").strip(),
-            "state": (r.get("state") or "").strip(),
-            "zip": (r.get("zip") or "").strip(),
-            "job_date": (r.get("job_date") or None),
-            "job_value": job_val,
-            "full_address": (r.get("full_address") or "").strip(),
+            "source_id": r.get("source_id"),
+            "job_index": r.get("job_index"),
+            "address1": r.get("address1"),
+            "address2": r.get("address2"),
+            "city": r.get("city"),
+            "state": r.get("state"),
+            "zip": r.get("zip"),
+            "job_date": r.get("job_date"),
+            "job_value": r.get("job_value"),
+            "full_address": r.get("full_address"),
         })
 
-    clear_normalized(run_id, "crm")
-    db.session.execute(stmt, payload)
+    stmt = text("""
+        INSERT INTO staging_crm
+          (run_id, user_id, source_id, job_index,
+           address1, address2, city, state, zip,
+           job_date, job_value, full_address)
+        VALUES
+          (:rid, :uid, :source_id, :job_index,
+           :address1, :address2, :city, :state, :zip,
+           :job_date, :job_value, :full_address)
+        ON CONFLICT (user_id, job_index) DO UPDATE
+        SET
+          -- reattach this canonical job to the current run
+          run_id        = EXCLUDED.run_id,
+          -- prefer new non-null source_id, otherwise keep existing
+          source_id     = COALESCE(EXCLUDED.source_id, staging_crm.source_id),
+          -- keep normalized fields in sync with the latest ingestion
+          address1      = EXCLUDED.address1,
+          address2      = EXCLUDED.address2,
+          city          = EXCLUDED.city,
+          state         = EXCLUDED.state,
+          zip           = EXCLUDED.zip,
+          job_date      = EXCLUDED.job_date,
+          job_value     = COALESCE(EXCLUDED.job_value, staging_crm.job_value),
+          full_address  = EXCLUDED.full_address
+    """)
+
+    db.session.execute(stmt, payload)  # psycopg3 does executemany with list-of-dicts
     db.session.commit()
-    return len(rows)
+    return len(payload)
 
 
 # ---------------------------

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+import hashlib
+from datetime import date
 from typing import Any, Dict, Optional
 from rapidfuzz import fuzz
 
@@ -131,10 +133,23 @@ def build_full_address(
     ]
     return _squash_ws(" ".join(parts))
 
-def build_job_index(source_id: str | None, full_address: str | None, job_date) -> str | None:
+def build_job_index(source_id: Optional[str],
+                    full_address: Optional[str],
+                    job_date: Optional[date]) -> Optional[str]:
+    """
+    Rules:
+    - If source_id is present -> return cleaned source_id (as the canonical job_index).
+    - Else if both full_address and job_date present -> return a stable hash of
+      "<full_address_lower>|<YYYY-MM-DD>" with a short prefix.
+    - Else -> None (row can't be identified and should be skipped upstream).
+    """
     sid = (source_id or "").strip()
     if sid:
-        return sid
+        return sid  # authoritative
+
     if full_address and job_date:
-        return f"{full_address.strip().lower()}|{job_date.isoformat()}"
+        key = f"{str(full_address).strip().lower()}|{job_date.isoformat()}"
+        digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+        return f"jid_{digest}"
+
     return None
