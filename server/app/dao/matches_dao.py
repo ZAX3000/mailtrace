@@ -18,6 +18,35 @@ def _chunks(seq: List[Dict], size: int = 1000):
         yield seq[i : i + size]
 
 
+def _ensure_defaults(row: Dict[str, Any]) -> None:
+    """Normalize/defend expected keys for INSERT/UPSERT payload."""
+    # required ids
+    row.setdefault("crm_line_no", None)
+    row.setdefault("crm_id", "")
+    row.setdefault("job_index", None)
+
+    # dates / money
+    row.setdefault("crm_job_date", None)
+    row.setdefault("job_value", None)
+
+    # geo / addr
+    row.setdefault("crm_city", "")
+    row.setdefault("crm_state", "")
+    row.setdefault("crm_zip", "")
+    row.setdefault("zip5", "")
+    row.setdefault("state", "")
+    row.setdefault("mail_full_address", "")
+    row.setdefault("crm_full_address", "")
+
+    # arrays
+    row.setdefault("mail_ids", [])
+    row.setdefault("matched_mail_dates", [])
+
+    # scoring / notes
+    row.setdefault("confidence_percent", 0)
+    row.setdefault("match_notes", "")
+
+
 # -----------------------
 # Delete for a run
 # -----------------------
@@ -25,7 +54,8 @@ def _chunks(seq: List[Dict], size: int = 1000):
 def delete_for_run(run_id: str, user_id: str) -> int:
     """
     Hard-delete all rows for (run_id, user_id) to make the next bulk insert idempotent.
-    Returns the number of rows deleted (as reported by the DB).
+    NOTE: We now upsert on (user_id, job_index), so old rows from prior runs for the same
+    (user_id, job_index) will be overwritten even if they belong to a different run_id.
     """
     stmt = text("""
         DELETE FROM matches
@@ -33,7 +63,6 @@ def delete_for_run(run_id: str, user_id: str) -> int:
            AND user_id = :user_id
     """)
     res = db.session.execute(stmt, {"run_id": run_id, "user_id": user_id})
-    # In SQLAlchemy 2.x, rowcount may be -1 depending on driver; still commit.
     db.session.commit()
     try:
         cr = cast(CursorResult[Any], res)
@@ -43,54 +72,37 @@ def delete_for_run(run_id: str, user_id: str) -> int:
 
 
 # -----------------------
-# Bulk insert
+# Bulk insert (UPSERT on (user_id, job_index))
 # -----------------------
 
 def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
     """
-    Insert match rows in bulk. `rows` are the 'transformed' dicts from matching.persist_matches_for_run()
-    Returns the count of inserted rows.
+    Insert/Upsert match rows in bulk.
+
+    We enforce uniqueness at the DB level with (user_id, job_index).
+    If the same job_index appears again for the same user on a new run,
+    we UPDATE the existing row with the latest values (arrays included).
     """
     rows_list: List[Dict] = list(rows)
     if not rows_list:
         return 0
 
-    # Attach run/user to each param dict once here so the SQL text can bind them.
     for r in rows_list:
         r["run_id"] = run_id
         r["user_id"] = user_id
+        _ensure_defaults(r)
 
-        # Ensure expected keys exist even if missing (defensive)
-        r.setdefault("crm_line_no", None)
-        r.setdefault("mail_line_no", None)
-        r.setdefault("crm_id", "")
-        r.setdefault("mail_id", "")
-        r.setdefault("crm_city", "")
-        r.setdefault("crm_state", "")
-        r.setdefault("crm_zip", "")
-        r.setdefault("job_value", None)
-        r.setdefault("mail_full_address", "")
-        r.setdefault("crm_full_address", "")
-        r.setdefault("mail_count_in_window", 0)
-        r.setdefault("crm_job_date", None)
-        r.setdefault("last_mail_date", None)
-        r.setdefault("confidence_percent", 0)
-        r.setdefault("match_notes", "")
-        r.setdefault("zip5", "")
-        r.setdefault("state", "")
-
+    # Column order must match VALUES placeholders.
+    # IMPORTANT: keep mail_full_address and crm_full_address in the right order.
     insert_sql = text("""
         INSERT INTO matches (
             run_id,
             user_id,
             crm_line_no,
-            mail_line_no,
-
             crm_id,
-            mail_id,
+            job_index,
 
             crm_job_date,
-            last_mail_date,
             job_value,
 
             crm_city,
@@ -99,7 +111,9 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
 
             mail_full_address,
             crm_full_address,
-            mail_count_in_window,
+
+            mail_ids,
+            matched_mail_dates,
 
             confidence_percent,
             match_notes,
@@ -111,22 +125,21 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
             :run_id,
             :user_id,
             :crm_line_no,
-            :mail_line_no,
-
             :crm_id,
-            :mail_id,
+            :job_index,
 
             :crm_job_date,
-            :last_mail_date,
             :job_value,
 
             :crm_city,
             :crm_state,
             :crm_zip,
 
-            :crm_full_address,
             :mail_full_address,
-            :mail_count_in_window,
+            :crm_full_address,
+
+            :mail_ids,
+            :matched_mail_dates,
 
             :confidence_percent,
             :match_notes,
@@ -134,43 +147,64 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
             :zip5,
             :state
         )
+        ON CONFLICT (user_id, job_index) DO UPDATE
+        SET
+            run_id             = EXCLUDED.run_id,
+            crm_line_no        = EXCLUDED.crm_line_no,
+            crm_id             = EXCLUDED.crm_id,
+            crm_job_date       = EXCLUDED.crm_job_date,
+            job_value          = EXCLUDED.job_value,
+            crm_city           = EXCLUDED.crm_city,
+            crm_state          = EXCLUDED.crm_state,
+            crm_zip            = EXCLUDED.crm_zip,
+            mail_full_address  = EXCLUDED.mail_full_address,
+            crm_full_address   = EXCLUDED.crm_full_address,
+            mail_ids           = EXCLUDED.mail_ids,
+            matched_mail_dates = EXCLUDED.matched_mail_dates,
+            confidence_percent = EXCLUDED.confidence_percent,
+            match_notes        = EXCLUDED.match_notes,
+            zip5               = EXCLUDED.zip5,
+            state              = EXCLUDED.state
     """)
 
     total_inserted = 0
     try:
         for chunk in _chunks(rows_list, size=1000):
-            db.session.execute(insert_sql, chunk)  # executemany with list of dicts
+            db.session.execute(insert_sql, chunk)  # executemany
             total_inserted += len(chunk)
         db.session.commit()
     except SQLAlchemyError:
-        # Critical: clear the failed transaction so callers can continue (e.g., update step status).
         db.session.rollback()
         raise
 
     return total_inserted
 
+
+# -----------------------
+# Read
+# -----------------------
+
 def fetch_for_run(run_id: str, user_id: Optional[str] = None) -> List[Dict]:
     """
     Return persisted matches for a run. If user_id is provided, also filter by it.
-    The selected columns mirror those written by bulk_insert().
+    Matches the columns written by bulk_insert().
     """
     base_sql = """
         SELECT
             run_id,
             user_id,
             crm_line_no,
-            mail_line_no,
             crm_id,
-            mail_id,
+            job_index,
             crm_job_date,
-            last_mail_date,
             job_value,
             crm_city,
             crm_state,
             crm_zip,
-            crm_full_address,
             mail_full_address,
-            mail_count_in_window,
+            crm_full_address,
+            mail_ids,
+            matched_mail_dates,
             confidence_percent,
             match_notes,
             zip5,
@@ -183,14 +217,10 @@ def fetch_for_run(run_id: str, user_id: Optional[str] = None) -> List[Dict]:
         base_sql += " AND user_id = :user_id"
         params["user_id"] = user_id
 
-    # Return newest first or by crm_line_no; choose what your UI expects. Here: crm_line_no asc.
     base_sql += " ORDER BY crm_line_no ASC"
 
     res = db.session.execute(text(base_sql), params)
-    # Use mappings() for dict-like rows in SQLAlchemy 2.x
     try:
-        rows = [dict(r) for r in res.mappings().all()]
+        return [dict(r) for r in res.mappings().all()]
     except AttributeError:
-        # Fallback for older SQLAlchemy
-        rows = [dict(r) for r in res.fetchall()]
-    return rows
+        return [dict(r) for r in res.fetchall()]

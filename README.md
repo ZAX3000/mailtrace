@@ -172,6 +172,10 @@ PY
 ```bash
 # Still inside /server
 python -m flask --app app:create_app run --debug -h 127.0.0.1 -p 5000
+
+or
+
+python -m flask --app app:create_app run
 ```
 
 Open [http://127.0.0.1:5000/](http://127.0.0.1:5000/) and walk the main pages.

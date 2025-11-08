@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Dict, List, Any, Optional
 
 from sqlalchemy import text
-from app.extensions import db  # keep this import if your project uses app.extensions.db
+from app.extensions import db
 
 
 # ---------------------------
@@ -21,7 +21,7 @@ def fetch_normalized_mail_rows(
     NOTE: Use only in small previews/debug flows. For gating, prefer count queries.
     """
     sql = """
-        SELECT run_id, user_id, source_id, line_no, address1, address2, city, state, zip, sent_date
+        SELECT run_id, user_id, source_id, line_no, address1, address2, city, state, zip, sent_date, full_address
         FROM staging_mail
         WHERE run_id = :rid
     """
@@ -73,12 +73,10 @@ def fetch_normalized_crm_rows(
     user_id: Optional[str] = None,
     limit: Optional[int] = None
 ) -> List[Dict[str, Any]]:
-    """
-    Return normalized CRM rows for a run (and optionally a user), ordered by line_no.
-    NOTE: Use only in small previews/debug flows. For gating, prefer count queries.
-    """
     sql = """
-        SELECT run_id, user_id, line_no, source_id, address1, address2, city, state, zip, job_date, job_value
+        SELECT run_id, user_id, line_no, source_id, job_index,
+            address1, address2, city, state, zip,
+            job_date, job_value, full_address
         FROM staging_crm
         WHERE run_id = :rid
     """

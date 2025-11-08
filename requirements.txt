@@ -1,24 +1,28 @@
-Flask==3.0.3
-Werkzeug==3.0.3
-Jinja2==3.1.4
-itsdangerous==2.2.0
+# --- Core web ---
+Flask==3.0.3              # your HTTP API framework
+Werkzeug==3.0.3           # Flask's WSGI/HTTP utilities (Flask depends on it; pin for reproducibility)
+Jinja2==3.1.4             # required by Flask even if you don't render templates
+itsdangerous==2.2.0       # signing utilities used by Flask (sessions, etc.)
 
+# --- Database ---
 SQLAlchemy==2.0.31
-alembic==1.13.2
 Flask-SQLAlchemy==3.1.1
+alembic==1.13.2
 Flask-Migrate==4.1.0
+psycopg[binary]==3.2.3    # Postgres driver
 
-psycopg[binary]==3.2.3        # Postgres driver (v3)
+# --- Config/env ---
 python-dotenv==1.0.1
-
-requests==2.32.3
-stripe==9.8.0
 Authlib==1.3.1
-boto3==1.34.132
-azure-storage-blob==12.19.1
 
-numpy==2.2.2
-pandas==2.2.3
+# --- HTTP / integrations ---
+stripe==9.8.0
+requests==2.32.3
+types-requests>=2.32
 
+# --- Matching / fuzzy compare ---
 rapidfuzz==3.9.7
-matplotlib==3.9.2
+
+# --- Compatibility (helps avoid resolver issues in CI and with some libs) ---
+typing-extensions>=4.9.0
+

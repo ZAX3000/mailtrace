@@ -12,6 +12,13 @@ from app.dao import run_dao, staging_dao, mapper_dao
 from app.services import summary
 from app.services.mapper import canon_for, apply_mapping
 from app.services.matching import persist_matches_for_run
+from app.utils.normalize import (
+    build_full_address,
+    normalize_address1,
+    block_key,
+    zip5,
+    build_job_index,
+)
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +37,7 @@ STEP = {
     "failed":              (100, "Run failed"),
 }
 
-# ---------- Tiny helpers (handle legacy/new DAO signatures) ----------
+# ---------- helpers ----------
 def _count_with_optional_user(fn: Callable, run_id: str, user_id: Optional[str]) -> int:
     try:
         return int(fn(run_id, user_id))
@@ -88,10 +95,40 @@ def to_date_or_none(v: Any) -> Optional[date]:
         except ValueError:
             pass
     try:
-        # tolerate ISO with time / trailing Z
         return datetime.fromisoformat(v.strip().replace("Z", "+00:00")).date()
     except Exception:
         return None
+
+def _prep_for_matching_mail(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        a1_norm = normalize_address1(str(r.get("address1", "") or ""))
+        out.append({
+            **r,
+            "_blk":      block_key(a1_norm),
+            "_addr_str": a1_norm,
+            "_zip5":     zip5(r.get("zip")),
+            "_city_l":   str(r.get("city", "")).strip().lower(),
+            "_state_l":  str(r.get("state", "")).strip().lower(),
+            "_date":     r.get("sent_date") or None,
+        })
+    return out
+
+def _prep_for_matching_crm(rows: list[dict]) -> list[dict]:
+    out = []
+    for r in rows:
+        a1_norm = normalize_address1(str(r.get("address1", "") or ""))
+        out.append({
+            **r,
+            "_blk":      block_key(a1_norm),
+            "_addr_str": a1_norm,
+            "_zip5":     zip5(r.get("zip")),
+            "_city_l":   str(r.get("city", "")).strip().lower(),
+            "_state_l":  str(r.get("state", "")).strip().lower(),
+            "_date":     r.get("job_date") or None,
+        })
+    return out
+
 
 # -------- Public API (controllers call only these) --------
 
@@ -250,8 +287,15 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
     if source == "mail":
         for r in normalized:
             r["sent_date"] = to_date_or_none(r.get("sent_date"))
-        rows_for_db = [dict(r, source_id=_to_str_or_none(r.get("id"))) for r in normalized]
-
+            r["full_address"] = build_full_address(
+                r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
+            )
+        rows_for_db = []
+        for r in normalized:
+            rows_for_db.append(dict(
+                r,
+                source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
+            ))
         _set(run_id, "mail_inserting")
         count = mapper_dao.insert_normalized_mail(run_id, user_id, rows_for_db)
         log.info("normalize_from_raw: inserted %d rows into staging_mail", count)
@@ -266,7 +310,26 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
     else:  # source == "crm"
         for r in normalized:
             r["job_date"] = to_date_or_none(r.get("job_date") or r.get("date") or r.get("created_at"))
-        rows_for_db = [dict(r, source_id=_to_str_or_none(r.get("source_id") or r.get("id"))) for r in normalized]
+            r["full_address"] = build_full_address(
+                r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
+            )
+            r["job_index"] = build_job_index(
+                r.get("source_id") or r.get("id"),
+                r.get("full_address"),
+                r.get("job_date"),
+            )
+
+            if not r["job_index"]:
+                r["_skip"] = True
+
+        rows_for_db = []
+        for r in normalized:
+            if r.get("_skip"):
+                continue
+            rows_for_db.append(dict(
+                r,
+                source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
+            ))
 
         _set(run_id, "crm_inserting")
         count = mapper_dao.insert_normalized_crm(run_id, user_id, rows_for_db)
@@ -324,8 +387,11 @@ def _match_and_aggregate_async(app: Flask, run_id: str) -> None:
             _tick(run_id, "match_start", pct=93, msg="Running matcher")
             t0 = time.time()
 
-            mail_rows: List[dict] = _fetch_with_user(staging_dao.fetch_normalized_mail_rows, run_id, user_id)
-            crm_rows:  List[dict] = _fetch_with_user(staging_dao.fetch_normalized_crm_rows,  run_id, user_id)
+            mail_rows_raw: List[dict] = _fetch_with_user(staging_dao.fetch_normalized_mail_rows, run_id, user_id)
+            crm_rows_raw:  List[dict] = _fetch_with_user(staging_dao.fetch_normalized_crm_rows,  run_id, user_id)
+
+            mail_rows = _prep_for_matching_mail(mail_rows_raw)
+            crm_rows  = _prep_for_matching_crm(crm_rows_raw)
 
             if not mail_rows or not crm_rows:
                 _tick(run_id, "match_done", pct=96, msg="No rows to match")
