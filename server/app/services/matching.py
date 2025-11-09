@@ -1,17 +1,14 @@
 # app/services/matching.py
 from __future__ import annotations
 
-import json
 import os
 from datetime import date
 from typing import Any, Dict, Iterable, Optional, List
 
 from rapidfuzz import fuzz, process
 
-# DB persist
 from app.dao import matches_dao
 
-# Reuse normalization utilities (already applied upstream; used here for notes logic)
 from app.utils.normalize import (
     tokens,
     street_type_of,
@@ -25,7 +22,6 @@ from app.utils.normalize import (
 def _mt_clean(_s: Any) -> str:
     return "" if _s is None else str(_s).strip()
 
-# Tuning via env
 MATCH_MIN_SCORE: float = 0.0
 try:
     MATCH_MIN_SCORE = float((os.getenv("MATCH_MIN_SCORE") or "").strip() or "0")
@@ -40,9 +36,6 @@ LIMIT_TOPK   = int((os.getenv("TOPK_RECHECK") or "1").strip())
 # -----------------------
 
 def _bonus_adjust(score_base: int, mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> int:
-    """
-    Lightweight deterministic bump based on exact field equality after ingestion.
-    """
     score = score_base
 
     mz, cz = mail_row.get("_zip5", ""), crm_row.get("_zip5", "")
@@ -58,10 +51,6 @@ def _bonus_adjust(score_base: int, mail_row: Dict[str, Any], crm_row: Dict[str, 
     return score
 
 def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> list[str]:
-    """
-    Human-friendly comparison notes using already-ingested raw fields.
-    (Address tokenization helpers come from utils.normalize.)
-    """
     a_mail = str(mail_row.get("address1", ""))
     a_crm  = str(crm_row.get("address1", ""))
     notes: list[str] = []
@@ -90,24 +79,14 @@ def _notes_for(mail_row: Dict[str, Any], crm_row: Dict[str, Any]) -> list[str]:
 # Main (RapidFuzz bulk)
 # -----------------------
 
-# Optional artifact for dashboard panel (no-DB)
 excluded_rows_collect: list[Dict[str, Any]] = []
 
 def run_matching(
     mail_rows: Iterable[Dict[str, Any]],
     crm_rows:  Iterable[Dict[str, Any]],
 ) -> list[Dict[str, Any]]:
-    """
-    Inputs are the *ingested + prepped* rows:
-      - mail_rows/crm_rows include DB fields (address1/2, city, state, zip, dates, full_address, etc.)
-      - plus ephemeral fields set by pipeline prep:
-          _addr_str (normalized address1 string for RF),
-          _zip5, _city_l, _state_l,
-          _date (sent_date for mail, job_date for crm)
-    """
     excluded_rows_collect.clear()
 
-    # Build a fast candidate map by ZIP5; fallback to 'all mail' if needed
     mail_rows_list: List[Dict[str, Any]] = list(mail_rows)
     crm_rows_list:  List[Dict[str, Any]] = list(crm_rows)
 
@@ -119,11 +98,9 @@ def run_matching(
     out_rows: list[Dict[str, Any]] = []
 
     for c in crm_rows_list:
-        # 1) Primary candidate set by _zip5; fallback to all mail if empty or missing
         czip = str(c.get("_zip5", "") or "")
         candidates = mail_by_zip.get(czip, []) or mail_rows_list
 
-        # 2) Date window: only include mail with date <= CRM job date
         cand = candidates
         if c.get("_date"):
             dt = c["_date"]
@@ -138,7 +115,6 @@ def run_matching(
                 })
                 continue
 
-        # 3) Optional quick city/state consistency filter (FAST_FILTERS)
         if FAST_FILTERS:
             cz, cc, cs = c.get("_zip5", ""), c.get("_city_l", ""), c.get("_state_l", "")
             cand_fast: list[Dict[str, Any]] = []
@@ -152,7 +128,6 @@ def run_matching(
             if cand_fast:
                 cand = cand_fast
 
-        # 4) RapidFuzz match on precomputed normalized strings
         addr_query = _mt_clean(c.get("_addr_str", ""))
         cand_strings = [_mt_clean(m.get("_addr_str", "")) for m in cand]
 
@@ -187,7 +162,6 @@ def run_matching(
             for _, base_score, idx in topk:
                 m = cand[idx]
                 adj = _bonus_adjust(int(base_score), m, c)
-                # tie-breaker: pick the earlier mail date (closest to first touch)
                 m_date_cmp: date = m["_date"] if isinstance(m.get("_date"), date) else date.min
                 best_date_cmp: date = best["_date"] if (best and isinstance(best.get("_date"), date)) else date.max
                 if adj > best_score or (adj == best_score and m_date_cmp < best_date_cmp):
@@ -205,7 +179,7 @@ def run_matching(
             })
             continue
 
-        # Build arrays from all candidates within the window (after filters)
+        # Build arrays from all candidates within the window
         mail_ids: list[str] = []
         matched_mail_dates: list[date] = []
         for m in cand:
@@ -227,7 +201,7 @@ def run_matching(
         row = {
             # CRM side
             "crm_line_no": c.get("line_no", ""),
-            "crm_id": c.get("source_id", ""),
+            "source_id": c.get("source_id", ""),
             "job_index": (c.get("job_index") or None),
             "crm_address1": c.get("address1", ""),
             "crm_address2": c.get("address2", ""),
@@ -251,18 +225,7 @@ def run_matching(
         if best_score >= MATCH_MIN_SCORE:
             out_rows.append(row)
 
-    # Optional artifact for dashboard panel (no-DB)
-    try:
-        _static_dir = os.path.join(os.path.dirname(__file__), "static")
-        os.makedirs(_static_dir, exist_ok=True)
-        _json_path = os.path.join(_static_dir, "excluded_latest.json")
-        with open(_json_path, "w", encoding="utf-8") as f:
-            json.dump(excluded_rows_collect, f, ensure_ascii=False)
-    except OSError:
-        pass
-
     return out_rows
-
 
 # -----------------------
 # Persist to DB wrapper
@@ -274,16 +237,13 @@ def persist_matches_for_run(
     mail_rows: Iterable[Dict[str, Any]],
     crm_rows:  Iterable[Dict[str, Any]],
 ) -> int:
-    """
-    Mail/CRM rows here should already include the prepped ephemeral fields.
-    """
     raw_rows = run_matching(mail_rows, crm_rows)
 
     transformed: list[Dict[str, Any]] = []
     for r in raw_rows:
         transformed.append({
             **r,
-            "zip5": str(r.get("crm_zip") or "")[:5],        # keep column contract with matches table
+            "zip5": str(r.get("crm_zip") or "")[:5],
             "state": str(r.get("crm_state") or "")[:2],
         })
 

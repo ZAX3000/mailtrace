@@ -11,8 +11,11 @@ def create_run(user_id: str) -> str:
     """Always create a new run for the user. Returns run_id (UUID string)."""
     run_id = db.session.execute(
         text("""
-            INSERT INTO runs (user_id, status, started_at)
-            VALUES (:u, 'queued', NOW())
+            INSERT INTO runs (
+              user_id, status, started_at,
+              mail_ready, crm_ready
+            )
+            VALUES (:u, 'queued', NOW(), false, false)
             RETURNING id::text
         """),
         {"u": str(user_id)},
