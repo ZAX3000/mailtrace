@@ -13,7 +13,8 @@ from app.services import summary
 from app.services.mapper import canon_for, apply_mapping
 from app.services.matching import persist_matches_for_run
 from app.utils.normalize import (
-    build_full_address,
+    build_full_address, 
+    build_mail_key,
     normalize_address1,
     block_key,
     zip5,
@@ -127,6 +128,78 @@ def _prep_for_matching_crm(rows: list[dict]) -> list[dict]:
             "_state_l":  str(r.get("state", "")).strip().lower(),
             "_date":     r.get("job_date") or None,
         })
+    return out
+
+
+def _dedupe_rows_for_insert_mail(user_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Rule:
+      - If source_id present: drop if that source_id already exists for user_id (or appears earlier in this batch)
+      - Else: require BOTH full_address and sent_date; drop if (full_address_lower, date) already exists for user_id
+              (or appears earlier in this batch)
+    """
+    from app.dao import mapper_dao  # local import to avoid cycles
+
+    existing_sids, existing_addr_dates = mapper_dao.fetch_mail_existing_keys(user_id)
+
+    seen_sids: set[str] = set()
+    seen_addr_dates: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+
+    for r in rows:
+        sid = (r.get("source_id") or "").strip()
+        fa  = (r.get("full_address") or "").strip().lower()
+        dt  = r.get("sent_date")
+
+        if sid:
+            if sid in existing_sids or sid in seen_sids:
+                continue
+            seen_sids.add(sid)
+            out.append(r)
+        else:
+            if not fa or not dt:
+                # no identity without both — skip silently
+                continue
+            key = (fa, dt.isoformat())
+            if key in existing_addr_dates or key in seen_addr_dates:
+                continue
+            seen_addr_dates.add(key)
+            out.append(r)
+
+    return out
+
+
+def _dedupe_rows_for_insert_crm(user_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Same rule as mail but using job_date.
+    """
+    from app.dao import mapper_dao
+
+    existing_sids, existing_addr_dates = mapper_dao.fetch_crm_existing_keys(user_id)
+
+    seen_sids: set[str] = set()
+    seen_addr_dates: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+
+    for r in rows:
+        sid = (r.get("source_id") or "").strip()
+        fa  = (r.get("full_address") or "").strip().lower()
+        dt  = r.get("job_date")
+
+        if sid:
+            if sid in existing_sids or sid in seen_sids:
+                continue
+            seen_sids.add(sid)
+            out.append(r)
+        else:
+            if not fa or not dt:
+                continue
+            key = (fa, dt.isoformat())
+            if key in existing_addr_dates or key in seen_addr_dates:
+                continue
+            seen_addr_dates.add(key)
+            out.append(r)
+
     return out
 
 
@@ -290,8 +363,18 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
             r["full_address"] = build_full_address(
                 r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
             )
+            r["mail_key"] = build_mail_key(
+                r.get("source_id") or r.get("id"),
+                r.get("full_address"),
+                r.get("sent_date"),
+            )
+            if not r["mail_key"]:
+                r["_skip"] = True  # defensively drop rows we can't identify
+
         rows_for_db = []
         for r in normalized:
+            if r.get("_skip"):
+                continue
             rows_for_db.append(dict(
                 r,
                 source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
@@ -318,11 +401,10 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                 r.get("full_address"),
                 r.get("job_date"),
             )
-
             if not r["job_index"]:
                 r["_skip"] = True
 
-        rows_for_db = []
+        rows_for_db: list[dict[str, Any]] = []
         for r in normalized:
             if r.get("_skip"):
                 continue
@@ -331,9 +413,12 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                 source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
             ))
 
+        rows_for_db = _dedupe_rows_for_insert_crm(user_id, rows_for_db)
+
         _set(run_id, "crm_inserting")
         count = mapper_dao.insert_normalized_crm(run_id, user_id, rows_for_db)
         log.info("normalize_from_raw: inserted %d rows into staging_crm", count)
+
 
         try:
             runs_dao.update_counts(run_id, crm_count=count, crm_ready=True)

@@ -5,8 +5,12 @@ from uuid import UUID
 
 from typing import cast
 from flask import Blueprint, jsonify, request, session, current_app, Flask
+from sqlalchemy import text
+from app.extensions import db
 
 from app.errors import BadRequest, NotFound, Conflict, Unauthorized
+
+from app.services import runs as runs_svc
 from app.services import pipeline
 from app.services.result import get_result as svc_get_result
 from app.services.mapper import (
@@ -25,17 +29,37 @@ VALID_SOURCES = {"mail", "crm"}
 # -----------------------
 
 def _ensure_dev_session_user() -> None:
-    """
-    In dev (DISABLE_AUTH=1), ensure session has a real user_id backed by DB.
-    """
     if not current_app.config.get("DISABLE_AUTH"):
         return
-    if "user_id" in session:
+
+    uid = session.get("user_id")
+    if uid:
+        db.session.execute(
+            text("""
+                INSERT INTO users (id, email, provider, full_name, created_at)
+                VALUES (CAST(:uid AS uuid), :email, 'dev', 'Dev User', NOW())
+                ON CONFLICT (id) DO NOTHING
+            """),
+            {"uid": uid, "email": f"dev_{str(uid)[:8]}@local"},
+        )
+        db.session.commit()
+        session.setdefault("email", f"dev_{str(uid)[:8]}@local")
         return
-    from app.blueprints.auth import _ensure_dev_user
-    u = _ensure_dev_user()
-    session["user_id"] = str(u.id)
-    session["email"] = u.email
+
+    row = db.session.execute(
+        text("""
+            WITH seeded AS (
+              INSERT INTO users (email, provider, full_name, created_at)
+              VALUES ('dev_' || substring(gen_random_uuid()::text,1,8) || '@local',
+                      'dev', 'Dev User', NOW())
+              RETURNING id::text AS id, email
+            )
+            SELECT id, email FROM seeded
+        """)
+    ).one()
+    session["user_id"] = row.id
+    session["email"] = row.email
+    db.session.commit()
 
 def _uid() -> str:
     _ensure_dev_session_user()
@@ -46,7 +70,7 @@ def _uid() -> str:
 
 def _norm_source(s: str) -> str:
     src = (s or "").strip().lower()
-    if src not in VALID_SOURCES:
+    if src not  in VALID_SOURCES:
         raise BadRequest(f"invalid source: {s!r}")
     return src
 
@@ -65,14 +89,10 @@ def create_run():
 def upload_raw(run_id: UUID, source: str):
     uid = _uid()
     source = _norm_source(source)
-
     f = request.files.get("file")
     if not f:
         raise BadRequest("missing file")
-
-    payload = svc_ingest_raw_file(
-        str(run_id), uid, source, f.stream, filename=f.filename or ""
-    )
+    payload = svc_ingest_raw_file(str(run_id), uid, source, f.stream, filename=f.filename or "")
     return jsonify(payload), 201
 
 
@@ -89,7 +109,6 @@ def save_mapping_route(run_id: UUID):
 @api_bp.post("/runs/<uuid:run_id>/start")
 def start_run(run_id: UUID):
     uid = _uid()
-
     missing = pipeline.check_mapping_readiness(str(run_id))
     if missing:
         return jsonify({"message": "Mapping required", "missing": missing}), 409
@@ -117,6 +136,7 @@ def run_result(run_id: UUID):
     except Conflict as e:
         return jsonify({"error": str(e)}), 409
 
+
 @api_bp.get("/runs/latest")
 def latest_run():
     """
@@ -131,6 +151,39 @@ def latest_run():
     if not rec:
         return ("", 204)
     return jsonify(rec), 200
+
+
+@api_bp.get("/runs")
+def list_runs():
+    """
+    Return a compact list of the user's recent runs for the History dropdown.
+    Query params:
+      - limit: int (default 25, max 100)
+      - before: run_id (optional, cursor)
+    """
+    uid = _uid()
+
+    try:
+        limit = int(request.args.get("limit", 25))
+    except ValueError:
+        limit = 25
+    limit = max(1, min(limit, 100))
+
+    before = request.args.get("before") or None  # optional run_id cursor
+
+    rows = runs_svc.list_for_user(uid, limit=limit, before=before)  # <-- use runs_svc
+
+    return jsonify({
+        "items": rows,          # [{id, started_at, summary?, status}]
+        "next_cursor": rows[-1]["id"] if rows else None
+    }), 200
+
+
+@api_bp.post("/runs/<uuid:run_id>/activate")
+def activate_run(run_id: UUID):
+    uid = _uid()
+    ok = runs_svc.set_active_run(uid, str(run_id))
+    return jsonify({"ok": bool(ok)}), 200
 
 # -----------------------
 # Mapper utilities
