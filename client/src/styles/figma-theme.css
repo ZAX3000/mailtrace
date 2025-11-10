@@ -1,0 +1,121 @@
+/* src/styles/figma-theme.css
+   Minimal, Figma-aligned shell + components used below
+*/
+
+/* App backdrop */
+:root {
+  --figma-bg: #F4F5F7;
+  --figma-ink: #0C2D50;
+  --muted: #6D8196;
+  --card-bg: #FFFFFF;
+  --pill-bg: #F4F5F7;
+  --ring: 0 0 0 2px rgba(12,45,80,.15);
+  --radius: 10px;
+  --shadow: 0 3px 15px rgba(0,0,0,.06);
+}
+
+html, body, #app { height: 100%; }
+body { margin: 0; background: var(--figma-bg); color: var(--figma-ink); font-family: ui-sans-serif, system-ui, Segoe UI, Roboto, Arial; }
+
+/* App shell (2 columns) */
+.fig-shell {
+  display: grid;
+  grid-template-columns: 318px 1fr;  /* sidebar card + content */
+  gap: 20px;
+  padding: 20px;                     /* matches Figma insets */
+  min-height: 100dvh;
+}
+
+/* “Rectangle 1” – sidebar card */
+.sidebar-card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  /* Keep the card visible top-to-bottom but not glued to viewport edges */
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - 40px);   /* 40 = top/bottom padding from shell */
+}
+
+/* Thin divider lines inside the sidebar (Line 1 / Line 2) */
+.sidebar-rule {
+  height: 1px;
+  background: #6D8196;
+  opacity: .3;
+  margin: 28px 25px; /* lines are 268px wide -> 318 - 25 - 25 */
+}
+
+/* Brand row */
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  padding: 25px 25px 0 25px; /* places logo at 45,45 in the full canvas */
+}
+
+.sidebar-logo {
+  width: 180px;  /* Figma width */
+  height: 43px;  /* Figma height */
+  display: block;
+}
+
+/* Nav list */
+.sidebar-nav {
+  padding: 20px;
+  display: grid;
+  gap: 14px;
+}
+
+/* pill (“Rectangle 4 / 203px top in Figma”) */
+.nav-pill {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: max-content 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-decoration: none;
+  background: transparent;
+}
+.nav-pill:hover { background: rgba(0,0,0,.03); }
+.nav-pill:focus-visible { outline: 2px solid transparent; box-shadow: var(--ring); }
+
+/* Active pill (the “pressed” look) */
+.nav-pill.is-active {
+  background: var(--pill-bg);
+  box-shadow: inset 0 0 9px rgba(0,0,0,.12);
+  color: var(--figma-ink);
+}
+
+/* Small icon sizing to feel like Figma’s 22px glyphs */
+.nav-ico { width: 22px; height: 22px; color: var(--figma-ink); }
+
+/* Footer section (Settings / Sign out) near the bottom */
+.sidebar-foot {
+  margin-top: auto;
+  padding: 20px;
+  display: grid;
+  gap: 10px;
+}
+
+/* Content column: put your dashboard “cards” inside here */
+.content-col {
+  min-height: calc(100dvh - 40px);
+  display: grid;
+  grid-auto-rows: min-content;
+  gap: 20px;
+}
+
+/* Generic card – matches “Rectangle 2/9/26/32” look */
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* Optional: a top bar card */
+.card.topbar { height: 68px; }
+
+/* figma-theme.css */
+.sidebar-logo { width: 180px; height: 43px; display: block; }

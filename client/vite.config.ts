@@ -2,11 +2,12 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { fileURLToPath, URL } from 'node:url'
+import svgLoader from 'vite-svg-loader'
 
 const FLASK = process.env.FLASK_URL || 'http://127.0.0.1:5000'
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), svgLoader()],
   resolve: {
     alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) },
   },

@@ -2,14 +2,16 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
 import Loader from '@/components/Loader.vue'
-import Navbar from '@/components/Navbar.vue'
-
+import Sidebar from '@/components/Sidebar.vue'
 import '@/styles/index.css'
-
 </script>
 
 <template>
   <Loader />
-  <Navbar />
-  <RouterView />
+  <div class="app">
+    <Sidebar />
+    <main class="app-main">
+      <RouterView />
+    </main>
+  </div>
 </template>

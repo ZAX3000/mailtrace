@@ -55,7 +55,7 @@ onBeforeUnmount(() => {
     <div class="wrap">
       <div class="left logo">
         <RouterLink to="/" aria-label="MailTrace home">
-          <img class="mt-logo" src="/img/logo.svg" alt="MailTrace logo" />
+          <img class="mt-logo" src="/src/assets/logo.svg" alt="MailTrace logo" />
         </RouterLink>
       </div>
 
