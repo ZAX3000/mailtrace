@@ -369,7 +369,7 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                 r.get("sent_date"),
             )
             if not r["mail_key"]:
-                r["_skip"] = True  # defensively drop rows we can't identify
+                r["_skip"] = True
 
         rows_for_db = []
         for r in normalized:
@@ -404,7 +404,7 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
             if not r["job_index"]:
                 r["_skip"] = True
 
-        rows_for_db: list[dict[str, Any]] = []
+        rows_for_db = []
         for r in normalized:
             if r.get("_skip"):
                 continue

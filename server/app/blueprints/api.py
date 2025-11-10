@@ -181,9 +181,13 @@ def list_runs():
 
 @api_bp.post("/runs/<uuid:run_id>/activate")
 def activate_run(run_id: UUID):
-    uid = _uid()
-    ok = runs_svc.set_active_run(uid, str(run_id))
-    return jsonify({"ok": bool(ok)}), 200
+    _ = _uid()
+    session["run_id"] = str(run_id)
+    try:
+        _ = pipeline.get_status(str(run_id))
+    except Exception:
+        pass
+    return jsonify({"ok": True}), 200
 
 # -----------------------
 # Mapper utilities
