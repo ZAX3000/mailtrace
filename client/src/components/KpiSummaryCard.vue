@@ -21,11 +21,11 @@
     <!-- 1 / 2 / 3 columns, bigger gaps -->
     <div v-else class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
       <div class="cardlike p-4 md:p-5 h-full">
-        <div class="small text-muted">Total Mailers Sent</div>
+        <div class="small text-muted">Mailers Sent</div>
         <div class="text-xl font-semibold" data-kpi="mail">{{ n(k.total_mail) }}</div>
       </div>
       <div class="cardlike p-4 md:p-5 h-full">
-        <div class="small text-muted">Unique Mail Addresses</div>
+        <div class="small text-muted">Unique Addresses</div>
         <div class="text-xl font-semibold" data-kpi="uniqmail">{{ n(k.unique_mail_addresses) }}</div>
       </div>
       <div class="cardlike p-4 md:p-5 h-full">
