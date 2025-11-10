@@ -42,15 +42,12 @@ def insert_raw_rows(run_id: str, user_id: str, source: str, rows: List[Dict[str,
     """
     tbl = _tbl_raw(source)
 
-    # Clear existing RAW for this run/source
     db.session.execute(text(f"DELETE FROM {tbl} WHERE run_id = :rid"), {"rid": run_id})
 
     if not rows:
         db.session.commit()
         return 0
 
-    # Prepare executemany insert
-    # NOTE: use a JSONB bindparam for 'data' so :data is typed correctly.
     stmt = (
         text(f"""
             INSERT INTO {tbl} (run_id, user_id, rownum, data)
@@ -155,6 +152,51 @@ def get_mapping(run_id: str, source: str) -> Dict[str, Any]:
     return (row and (row._mapping.get("mapping") or {})) or {}
 
 
+# --- Fetch existing keys for dedupe -----------------------------------------
+
+def fetch_mail_existing_keys(user_id: str) -> tuple[set[str], set[tuple[str, str]]]:
+    """
+    Return:
+      - source_ids: set[str] of existing non-null source_id for this user
+      - addr_dates: set[(full_address_lower, YYYY-MM-DD)] for rows with NULL source_id
+    """
+    sid_rows = db.session.execute(text("""
+        SELECT source_id
+        FROM staging_mail
+        WHERE user_id = :uid AND source_id IS NOT NULL
+    """), {"uid": user_id}).all()
+    source_ids = {r.source_id for r in sid_rows if r.source_id}
+
+    ad_rows = db.session.execute(text("""
+        SELECT LOWER(COALESCE(full_address,'')) AS fa, sent_date
+        FROM staging_mail
+        WHERE user_id = :uid AND source_id IS NULL
+          AND full_address IS NOT NULL AND sent_date IS NOT NULL
+    """), {"uid": user_id}).all()
+    addr_dates = {(r.fa, r.sent_date.isoformat()) for r in ad_rows if r.sent_date}
+
+    return source_ids, addr_dates
+
+
+def fetch_crm_existing_keys(user_id: str) -> tuple[set[str], set[tuple[str, str]]]:
+    sid_rows = db.session.execute(text("""
+        SELECT source_id
+        FROM staging_crm
+        WHERE user_id = :uid AND source_id IS NOT NULL
+    """), {"uid": user_id}).all()
+    source_ids = {r.source_id for r in sid_rows if r.source_id}
+
+    ad_rows = db.session.execute(text("""
+        SELECT LOWER(COALESCE(full_address,'')) AS fa, job_date
+        FROM staging_crm
+        WHERE user_id = :uid AND source_id IS NULL
+          AND full_address IS NOT NULL AND job_date IS NOT NULL
+    """), {"uid": user_id}).all()
+    addr_dates = {(r.fa, r.job_date.isoformat()) for r in ad_rows if r.job_date}
+
+    return source_ids, addr_dates
+
+
 # -------------------------------------------
 # Normalized inserts (canonical mail / CRM CSV)
 # -------------------------------------------
@@ -164,104 +206,131 @@ def clear_normalized(run_id: str, source: str) -> None:
     db.session.execute(text(f"DELETE FROM {tbl} WHERE run_id = :rid"), {"rid": run_id})
     db.session.commit()
 
-def _extract_source_id(row: Dict[str, Any]) -> Any:
-    """
-    Normalize input id fields to a single 'source_id' value.
-    Priority: explicit 'source_id'
-    Coerce blank strings to None; leave non-blank strings as-is.
-    """
-    sid = row.get("source_id")
-
-    if isinstance(sid, str):
-        sid = sid.strip()
-        if sid == "":
-            sid = None
-    return sid
-
-def insert_normalized_mail(run_id: str, user_id: str, rows: List[Dict[str, Any]]) -> int:
+# MAIL
+def insert_normalized_mail(run_id: str, user_id: str, rows: list[dict[str, Any]]) -> int:
     if not rows:
-        clear_normalized(run_id, "mail")
         return 0
 
-    tbl = _tbl_norm("mail")
-    stmt = text(f"""
-        INSERT INTO {tbl}
-          (run_id, user_id, source_id, address1, address2, city, state, zip, sent_date, full_address)
+    # 1) in-memory de-dup by mail_key (keeps first occurrence)
+    seen = set()
+    dedup = []
+    for r in rows:
+        mk = (str(r.get("mail_key") or "").strip())
+        if not mk:
+            raise ValueError("mail_key is required for all mail rows")
+        if mk in seen:
+            continue
+        seen.add(mk)
+        dedup.append(r)
+    rows = dedup
+
+    # 2) upsert against (user_id, mail_key) for idempotency across runs
+    stmt = text("""
+        INSERT INTO staging_mail
+          (run_id, user_id, mail_key, source_id,
+           address1, address2, city, state, zip, full_address, sent_date)
         VALUES
-          (:rid, :uid, :source_id, :address1, :address2, :city, :state, :zip, :sent_date, :full_address)
+          (:rid, :uid, :mail_key, :source_id,
+           :address1, :address2, :city, :state, :zip, :full_address, :sent_date)
+        ON CONFLICT (user_id, mail_key) DO UPDATE
+        SET
+          -- reattach this canonical mail row to the current run
+          run_id       = EXCLUDED.run_id,
+          -- prefer new non-null source_id if provided
+          source_id    = COALESCE(EXCLUDED.source_id, staging_mail.source_id),
+          -- keep normalized fields in sync with latest ingestion
+          address1     = EXCLUDED.address1,
+          address2     = EXCLUDED.address2,
+          city         = EXCLUDED.city,
+          state        = EXCLUDED.state,
+          zip          = EXCLUDED.zip,
+          full_address = EXCLUDED.full_address,
+          sent_date    = EXCLUDED.sent_date
     """)
 
     payload = []
     for r in rows:
+        src = r.get("source_id")
+        addr2 = r.get("address2")
         payload.append({
             "rid": run_id,
             "uid": user_id,
-            "source_id": _extract_source_id(r),
+            "mail_key": str(r.get("mail_key")).strip(),
+            "source_id": (src.strip() if isinstance(src, str) and src.strip() else None),
             "address1": (r.get("address1") or "").strip(),
-            "address2": (r.get("address2") or "").strip(),
+            "address2": (addr2.strip() if isinstance(addr2, str) and addr2.strip() else None),
             "city": (r.get("city") or "").strip(),
             "state": (r.get("state") or "").strip(),
-            "zip": (r.get("zip") or "").strip(),
-            "sent_date": (r.get("sent_date") or None),
+            "zip": (str(r.get("zip")) if r.get("zip") is not None else "").strip(),  # keep leading zeros
             "full_address": (r.get("full_address") or "").strip(),
+            "sent_date": r.get("sent_date") or None,
         })
 
-    clear_normalized(run_id, "mail")
     db.session.execute(stmt, payload)
-    db.session.commit()
-    return len(rows)
-
+    return len(payload)
 
 
 def insert_normalized_crm(run_id: str, user_id: str, rows: list[dict]) -> int:
     if not rows:
         return 0
 
-    payload = []
+    # 1) in-memory de-dup by job_index (keep first)
+    seen = set()
+    dedup = []
     for r in rows:
-        payload.append({
-            "rid": run_id,
-            "uid": user_id,
-            "source_id": r.get("source_id"),
-            "job_index": r.get("job_index"),
-            "address1": r.get("address1"),
-            "address2": r.get("address2"),
-            "city": r.get("city"),
-            "state": r.get("state"),
-            "zip": r.get("zip"),
-            "job_date": r.get("job_date"),
-            "job_value": r.get("job_value"),
-            "full_address": r.get("full_address"),
-        })
+        ji = str(r.get("job_index") or "").strip()
+        if not ji:
+            raise ValueError("job_index is required for all CRM rows")
+        if ji in seen:
+            continue
+        seen.add(ji)
+        dedup.append(r)
+    rows = dedup
 
+    # 2) upsert for cross-run idempotency on (user_id, job_index)
     stmt = text("""
         INSERT INTO staging_crm
           (run_id, user_id, source_id, job_index,
-           address1, address2, city, state, zip,
-           job_date, job_value, full_address)
+           address1, address2, city, state, zip, full_address,
+           job_date, job_value)
         VALUES
           (:rid, :uid, :source_id, :job_index,
-           :address1, :address2, :city, :state, :zip,
-           :job_date, :job_value, :full_address)
+           :address1, :address2, :city, :state, :zip, :full_address,
+           :job_date, :job_value)
         ON CONFLICT (user_id, job_index) DO UPDATE
         SET
-          -- reattach this canonical job to the current run
-          run_id        = EXCLUDED.run_id,
-          -- prefer new non-null source_id, otherwise keep existing
-          source_id     = COALESCE(EXCLUDED.source_id, staging_crm.source_id),
-          -- keep normalized fields in sync with the latest ingestion
-          address1      = EXCLUDED.address1,
-          address2      = EXCLUDED.address2,
-          city          = EXCLUDED.city,
-          state         = EXCLUDED.state,
-          zip           = EXCLUDED.zip,
-          job_date      = EXCLUDED.job_date,
-          job_value     = COALESCE(EXCLUDED.job_value, staging_crm.job_value),
-          full_address  = EXCLUDED.full_address
+          run_id       = EXCLUDED.run_id,
+          source_id    = COALESCE(EXCLUDED.source_id, staging_crm.source_id),
+          address1     = EXCLUDED.address1,
+          address2     = EXCLUDED.address2,
+          city         = EXCLUDED.city,
+          state        = EXCLUDED.state,
+          zip          = EXCLUDED.zip,
+          full_address = EXCLUDED.full_address,
+          job_date     = EXCLUDED.job_date,
+          job_value    = COALESCE(EXCLUDED.job_value, staging_crm.job_value)
     """)
 
-    db.session.execute(stmt, payload)  # psycopg3 does executemany with list-of-dicts
-    db.session.commit()
+    payload = []
+    for r in rows:
+        src = r.get("source_id")
+        addr2 = r.get("address2")
+        payload.append({
+            "rid": run_id,
+            "uid": user_id,
+            "source_id": (src.strip() if isinstance(src, str) and src.strip() else None),
+            "job_index": str(r.get("job_index")).strip(),
+            "address1": (r.get("address1") or "").strip(),
+            "address2": (addr2.strip() if isinstance(addr2, str) and addr2.strip() else None),
+            "city": (r.get("city") or "").strip(),
+            "state": (r.get("state") or "").strip(),
+            "zip": (str(r.get("zip")) if r.get("zip") is not None else "").strip(),
+            "full_address": (r.get("full_address") or "").strip(),
+            "job_date": r.get("job_date"),
+            "job_value": r.get("job_value"),
+        })
+
+    db.session.execute(stmt, payload)
     return len(payload)
 
 

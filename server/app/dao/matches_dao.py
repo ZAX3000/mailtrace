@@ -22,7 +22,6 @@ def _ensure_defaults(row: Dict[str, Any]) -> None:
     """Normalize/defend expected keys for INSERT/UPSERT payload."""
     # required ids
     row.setdefault("crm_line_no", None)
-    row.setdefault("crm_id", "")
     row.setdefault("job_index", None)
 
     # dates / money
@@ -99,7 +98,6 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
             run_id,
             user_id,
             crm_line_no,
-            crm_id,
             job_index,
 
             crm_job_date,
@@ -125,7 +123,6 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
             :run_id,
             :user_id,
             :crm_line_no,
-            :crm_id,
             :job_index,
 
             :crm_job_date,
@@ -151,7 +148,6 @@ def bulk_insert(run_id: str, user_id: str, rows: Iterable[Dict]) -> int:
         SET
             run_id             = EXCLUDED.run_id,
             crm_line_no        = EXCLUDED.crm_line_no,
-            crm_id             = EXCLUDED.crm_id,
             crm_job_date       = EXCLUDED.crm_job_date,
             job_value          = EXCLUDED.job_value,
             crm_city           = EXCLUDED.crm_city,
@@ -194,7 +190,6 @@ def fetch_for_run(run_id: str, user_id: Optional[str] = None) -> List[Dict]:
             run_id,
             user_id,
             crm_line_no,
-            crm_id,
             job_index,
             crm_job_date,
             job_value,

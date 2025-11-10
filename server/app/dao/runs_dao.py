@@ -1,7 +1,7 @@
-# app/dao/run_dao.py
+# app/dao/runs_dao.py
 from __future__ import annotations
 
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 from app.extensions import db
 
@@ -11,8 +11,11 @@ def create_run(user_id: str) -> str:
     """Always create a new run for the user. Returns run_id (UUID string)."""
     run_id = db.session.execute(
         text("""
-            INSERT INTO runs (user_id, status, started_at)
-            VALUES (:u, 'queued', NOW())
+            INSERT INTO runs (
+              user_id, status, started_at,
+              mail_ready, crm_ready
+            )
+            VALUES (:u, 'queued', NOW(), false, false)
             RETURNING id::text
         """),
         {"u": str(user_id)},
@@ -209,3 +212,58 @@ def latest_for_user(user_id: str, only_done: bool = False) -> Optional[Dict[str,
 def latest_done_for_user(user_id: str) -> Optional[Dict[str, Any]]:
     """Shorthand for latest_for_user(user_id, only_done=True)."""
     return latest_for_user(user_id, only_done=True)
+
+def list_for_user(user_id: str, *, limit: int = 25, before_run_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Returns recent runs for a user (newest first).
+    If before_run_id is provided, returns runs older than that anchor (cursor pagination).
+    Shape is compact for dropdowns.
+    """
+    params: Dict[str, Any] = {"u": str(user_id), "lim": int(max(1, min(limit, 100)))}
+
+    anchor_clause = ""
+    if before_run_id:
+        # Find the anchor's started_at and then page older than it
+        anchor = db.session.execute(
+            text("SELECT started_at FROM runs WHERE id = :rid"),
+            {"rid": str(before_run_id)},
+        ).scalar_one_or_none()
+        if anchor:
+            anchor_clause = "AND started_at < :anchor"
+            params["anchor"] = anchor
+
+    rows = db.session.execute(text(f"""
+        SELECT
+          id::text      AS id,
+          started_at,
+          status,
+          -- Optional short summary line for UI; keep NULL if you don't compute it server-side
+          CONCAT(
+            COALESCE(NULLIF(mail_count,0)::text, '0'), ' mail · ',
+            COALESCE(NULLIF(crm_count,0)::text, '0'), ' crm'
+          ) AS summary
+        FROM runs
+        WHERE user_id = :u
+          {anchor_clause}
+        ORDER BY started_at DESC
+        LIMIT :lim
+    """), params).mappings().all()
+
+    return [dict(r) for r in rows]
+
+def get_by_id_compact(run_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Compact single-run fetch (id, status, times, counts). Great for detail hover tooltips.
+    """
+    row = db.session.execute(text("""
+        SELECT
+          id::text      AS id,
+          user_id::text AS user_id,
+          status, step, pct, message,
+          started_at, finished_at,
+          mail_count, crm_count, mail_ready, crm_ready
+        FROM runs
+        WHERE id = :rid
+        LIMIT 1
+    """), {"rid": str(run_id)}).mappings().first()
+    return dict(row) if row else None

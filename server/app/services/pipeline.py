@@ -8,12 +8,13 @@ from typing import Dict, Any, List, Set, Optional, Callable
 from datetime import date, datetime
 from flask import Flask, has_app_context
 
-from app.dao import run_dao, staging_dao, mapper_dao
+from app.dao import runs_dao, staging_dao, mapper_dao
 from app.services import summary
 from app.services.mapper import canon_for, apply_mapping
 from app.services.matching import persist_matches_for_run
 from app.utils.normalize import (
-    build_full_address,
+    build_full_address, 
+    build_mail_key,
     normalize_address1,
     block_key,
     zip5,
@@ -64,11 +65,11 @@ def _set(run_id: str, key: str, *, pct: int | None = None, msg: str | None = Non
     pct = default_pct if pct is None else pct
     msg = default_msg if msg is None else msg
     log.debug("status [%s] run_id=%s pct=%s msg=%s", key, run_id, pct, msg)
-    run_dao.update_step(run_id, step=key, pct=pct or 0, message=msg or "")
+    runs_dao.update_step(run_id, step=key, pct=pct or 0, message=msg or "")
 
 def _fail(run_id: str, *, msg: str) -> None:
     log.error("run %s failed: %s", run_id, msg)
-    run_dao.update_step(run_id, step="failed", pct=100, message=msg)
+    runs_dao.update_step(run_id, step="failed", pct=100, message=msg)
     raise RuntimeError(msg)
 
 def _tick(run_id: str, substep: str, *, pct: int | None = None, msg: str | None = None) -> None:
@@ -76,7 +77,7 @@ def _tick(run_id: str, substep: str, *, pct: int | None = None, msg: str | None 
     pct = base_pct if pct is None else pct
     m = f"[{substep}] {msg or ''}".strip()
     log.debug("tick run_id=%s ctx=%s pct=%s %s", run_id, has_app_context(), pct, m)
-    run_dao.update_step(run_id, step="matching", pct=pct, message=m)
+    runs_dao.update_step(run_id, step="matching", pct=pct, message=m)
 
 _DATE_FORMATS = (
     "%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y", "%d-%m-%Y",
@@ -130,10 +131,82 @@ def _prep_for_matching_crm(rows: list[dict]) -> list[dict]:
     return out
 
 
-# -------- Public API (controllers call only these) --------
+def _dedupe_rows_for_insert_mail(user_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Rule:
+      - If source_id present: drop if that source_id already exists for user_id (or appears earlier in this batch)
+      - Else: require BOTH full_address and sent_date; drop if (full_address_lower, date) already exists for user_id
+              (or appears earlier in this batch)
+    """
+    from app.dao import mapper_dao  # local import to avoid cycles
+
+    existing_sids, existing_addr_dates = mapper_dao.fetch_mail_existing_keys(user_id)
+
+    seen_sids: set[str] = set()
+    seen_addr_dates: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+
+    for r in rows:
+        sid = (r.get("source_id") or "").strip()
+        fa  = (r.get("full_address") or "").strip().lower()
+        dt  = r.get("sent_date")
+
+        if sid:
+            if sid in existing_sids or sid in seen_sids:
+                continue
+            seen_sids.add(sid)
+            out.append(r)
+        else:
+            if not fa or not dt:
+                # no identity without both — skip silently
+                continue
+            key = (fa, dt.isoformat())
+            if key in existing_addr_dates or key in seen_addr_dates:
+                continue
+            seen_addr_dates.add(key)
+            out.append(r)
+
+    return out
+
+
+def _dedupe_rows_for_insert_crm(user_id: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Same rule as mail but using job_date.
+    """
+    from app.dao import mapper_dao
+
+    existing_sids, existing_addr_dates = mapper_dao.fetch_crm_existing_keys(user_id)
+
+    seen_sids: set[str] = set()
+    seen_addr_dates: set[tuple[str, str]] = set()
+    out: list[dict[str, Any]] = []
+
+    for r in rows:
+        sid = (r.get("source_id") or "").strip()
+        fa  = (r.get("full_address") or "").strip().lower()
+        dt  = r.get("job_date")
+
+        if sid:
+            if sid in existing_sids or sid in seen_sids:
+                continue
+            seen_sids.add(sid)
+            out.append(r)
+        else:
+            if not fa or not dt:
+                continue
+            key = (fa, dt.isoformat())
+            if key in existing_addr_dates or key in seen_addr_dates:
+                continue
+            seen_addr_dates.add(key)
+            out.append(r)
+
+    return out
+
+
+# -------- Public API --------
 
 def create_or_get_active_run(user_id: str) -> str:
-    rid = run_dao.create_or_get_active_run(user_id)
+    rid = runs_dao.create_or_get_active_run(user_id)
     log.debug("create_or_get_active_run: user=%s -> run_id=%s", user_id, rid)
     return rid
 
@@ -141,7 +214,7 @@ def mark_start(run_id: str) -> None:
     _set(run_id, "starting")
 
 def get_status(run_id: str) -> Dict[str, Any]:
-    s = run_dao.status(run_id) or {}
+    s = runs_dao.status(run_id) or {}
     out = {
         "run_id": run_id,
         "status": s.get("status") or "queued",
@@ -158,11 +231,11 @@ def latest_run_for_user(user_id: str, only_done: bool = False) -> Optional[Dict[
     Returns a dict like status() or None.
     """
     try:
-        return run_dao.latest_for_user(user_id, only_done=only_done)
+        return runs_dao.latest_for_user(user_id, only_done=only_done)
     except TypeError:
         # Back-compat shim if older DAO exposes a different split API
-        if only_done and hasattr(run_dao, "latest_done_for_user"):
-            return run_dao.latest_done_for_user(user_id)
+        if only_done and hasattr(runs_dao, "latest_done_for_user"):
+            return runs_dao.latest_done_for_user(user_id)
         return None
 
 # -------- Orchestration entrypoint --------
@@ -180,26 +253,26 @@ def start_pipeline(run_id: str, user_id: str, flask_app: Flask) -> None:
     if crm_n <= 0:
         _fail(run_id, msg="CRM CSV appears empty or invalid after normalization.")
 
-    if not run_dao.pair_ready(run_id):
+    if not runs_dao.pair_ready(run_id):
         _fail(run_id, msg="Staging not ready after normalization (internal consistency error).")
 
     start_matching(run_id, flask_app)
 
-# -------- Matching launcher (service-layer, uses DAO for persistence) --------
+# -------- Matching launcher --------
 
 def start_matching(run_id: str, flask_app: Flask) -> None:
-    meta = run_dao.status(run_id) or {}
+    meta = runs_dao.status(run_id) or {}
     current = (meta or {}).get("status")
 
     if current in {"matching", "aggregating", "done", "failed"}:
         log.debug("start_matching: run_id=%s already %s; skip", run_id, current)
         return
 
-    if not run_dao.pair_ready(run_id):
+    if not runs_dao.pair_ready(run_id):
         log.debug("start_matching: run_id=%s not pair_ready; skip", run_id)
         return
 
-    run_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
+    runs_dao.update_step(run_id, step="matching", pct=90, message="Linking Mail ↔ CRM")
     log.info("start_matching: claimed run_id=%s; spawning matcher thread", run_id)
 
     t = Thread(
@@ -210,7 +283,7 @@ def start_matching(run_id: str, flask_app: Flask) -> None:
     )
     t.start()
 
-# -------- Mapping gate (used by controller before starting pipeline) --------
+# -------- Mapping gate --------
 
 def check_mapping_readiness(run_id: str) -> Dict[str, List[str]]:
     out: Dict[str, List[str]] = {}
@@ -244,7 +317,7 @@ def check_mapping_readiness(run_id: str) -> Dict[str, List[str]]:
     log.debug("check_mapping_readiness(%s) -> %s", run_id, out)
     return out
 
-# -------- Normalize RAW -> staging for a single source --------
+# -------- Normalize RAW --------
 
 def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
     source = (source or "").strip().lower()
@@ -290,8 +363,18 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
             r["full_address"] = build_full_address(
                 r.get("address1"), r.get("address2"), r.get("city"), r.get("state"), r.get("zip")
             )
+            r["mail_key"] = build_mail_key(
+                r.get("source_id") or r.get("id"),
+                r.get("full_address"),
+                r.get("sent_date"),
+            )
+            if not r["mail_key"]:
+                r["_skip"] = True
+
         rows_for_db = []
         for r in normalized:
+            if r.get("_skip"):
+                continue
             rows_for_db.append(dict(
                 r,
                 source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
@@ -301,9 +384,9 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
         log.info("normalize_from_raw: inserted %d rows into staging_mail", count)
 
         try:
-            run_dao.update_counts(run_id, mail_count=count, mail_ready=True)
+            runs_dao.update_counts(run_id, mail_count=count, mail_ready=True)
         except TypeError:
-            log.debug("run_dao.update_counts signature mismatch; skipping mail_ready flag")
+            log.debug("runs_dao.update_counts signature mismatch; skipping mail_ready flag")
 
         _set(run_id, "mail_ready")
 
@@ -318,7 +401,6 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                 r.get("full_address"),
                 r.get("job_date"),
             )
-
             if not r["job_index"]:
                 r["_skip"] = True
 
@@ -331,14 +413,17 @@ def normalize_from_raw(run_id: str, user_id: str, source: str) -> int:
                 source_id=_to_str_or_none(r.get("source_id") or r.get("id")),
             ))
 
+        rows_for_db = _dedupe_rows_for_insert_crm(user_id, rows_for_db)
+
         _set(run_id, "crm_inserting")
         count = mapper_dao.insert_normalized_crm(run_id, user_id, rows_for_db)
         log.info("normalize_from_raw: inserted %d rows into staging_crm", count)
 
+
         try:
-            run_dao.update_counts(run_id, crm_count=count, crm_ready=True)
+            runs_dao.update_counts(run_id, crm_count=count, crm_ready=True)
         except TypeError:
-            log.debug("run_dao.update_counts signature mismatch; skipping crm_ready flag")
+            log.debug("runs_dao.update_counts signature mismatch; skipping crm_ready flag")
 
         _set(run_id, "crm_ready")
 
@@ -365,8 +450,8 @@ def _match_and_aggregate_async(app: Flask, run_id: str) -> None:
 
             _tick(run_id, "load", pct=91, msg="Loading normalized rows")
 
-            run_meta = run_dao.status(run_id) or {}
-            user_id_opt: Optional[str] = run_meta.get("user_id") or run_dao.get_user_id(run_id)
+            run_meta = runs_dao.status(run_id) or {}
+            user_id_opt: Optional[str] = run_meta.get("user_id") or runs_dao.get_user_id(run_id)
             user_id: str = str(user_id_opt or "")
 
             try:
@@ -421,7 +506,7 @@ def _match_and_aggregate_async(app: Flask, run_id: str) -> None:
 
         except Exception as e:
             log.exception("matcher: failed run_id=%s: %s", run_id, e)
-            run_dao.update_step(run_id, step="failed", pct=100, message=str(e))
+            runs_dao.update_step(run_id, step="failed", pct=100, message=str(e))
 
         finally:
             stop.set()

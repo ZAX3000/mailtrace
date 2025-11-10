@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Sequence, Tuple, Mapping
 from sqlalchemy import text
 from app.extensions import db
 
-# Whitelist identifiers to keep dynamic SQL safe
 ALLOWED = {
     # staging tables
     "staging_mail": {
@@ -16,15 +15,14 @@ ALLOWED = {
         "job_date", "job_value", "run_id", "user_id", "full_address",
         "job_index",
     },
-    # matches schema (post-normalization + matching)
+    # matches schema
     "matches": {
         "run_id", "user_id",
-        "crm_id", "crm_city", "crm_state", "crm_zip", "crm_full_address",
+        "crm_city", "crm_state", "crm_zip", "crm_full_address",
         "mail_full_address",
         "mail_ids", "matched_mail_dates",
         "zip5", "job_value", "crm_job_date",
         "job_index",
-        # keep common filters minimal/safe; add more if you truly need them
     },
 }
 
@@ -56,8 +54,8 @@ def count_distinct(table: str, distinct_cols: Sequence[str], filters: Dict[str, 
 
 def series_count_distinct_by_month(
     table: str,
-    month_from_col: str,            # e.g., 'sent_date' or 'job_date'
-    distinct_cols: Sequence[str],   # tuple to dedupe per row
+    month_from_col: str,
+    distinct_cols: Sequence[str],
     filters: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
     _assert_ident(table, [month_from_col, *distinct_cols])
@@ -73,14 +71,9 @@ def series_count_distinct_by_month(
     res = db.session.execute(text(sql), params)
     return [dict(row._mapping) for row in res]
 
-# ---------- Deduped matches (one row per matched job) ----------
+# ---------- Deduped matches ----------
 
 def fetch_deduped_matches(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    One row per matched JOB, keyed strictly by job_index.
-    We still expose a scalar matched_mail_date by collapsing the array; keep MAX()
-    to match prior behavior. (Switch to MIN() if you prefer 'earliest mailer'.)
-    """
     table = "matches"
     _assert_ident(table, list(filters))
     where_sql, params = _where_clause(table, filters)
@@ -113,10 +106,6 @@ def fetch_deduped_matches(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def series_deduped_matches_by_month(filters: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Monthly count of deduped matched jobs, bucketing by crm_job_date,
-    keyed strictly by job_index.
-    """
     where_sql, params = _where_clause("matches", filters)
     and_or_where = " AND " if where_sql else " WHERE "
     sql = f"""
@@ -139,9 +128,6 @@ def series_deduped_matches_by_month(filters: Dict[str, Any]) -> List[Dict[str, A
     return [dict(row._mapping) for row in res]
 
 def top_from_deduped_matches(filters: Dict[str, Any], group_field: str) -> List[Dict[str, Any]]:
-    """
-    Top counts from deduped matches (e.g., group_field='crm_city' or 'zip5').
-    """
     if group_field not in {"crm_city", "zip5"}:
         raise ValueError("group_field must be 'crm_city' or 'zip5'")
     deds = fetch_deduped_matches(filters)

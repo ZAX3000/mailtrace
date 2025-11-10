@@ -2,12 +2,12 @@ from __future__ import annotations
 from typing import Dict, Any
 
 from app.errors import NotFound, Conflict, Unauthorized
-from app.dao import run_dao
+from app.dao import runs_dao
 from app.services import summary
 
 def get_result(run_id: str, user_id: str) -> Dict[str, Any]:
     """Return KPIs (computed from DB) for a finished run; enforce ownership and state."""
-    meta = run_dao.status(run_id)
+    meta = runs_dao.status(run_id)
     if not meta:
         raise NotFound("run not found")
 

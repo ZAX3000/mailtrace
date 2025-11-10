@@ -1,0 +1,72 @@
+services:
+  db:
+    image: postgres:16
+    container_name: mailtrace-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "${DB_PORT_HOST:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  api:
+    build: .
+    container_name: mailtrace-api
+    env_file:
+      - .env
+    # Override DATABASE_URL to point at the 'db' service if not already set
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      FLASK_ENV: ${FLASK_ENV}
+      DISABLE_AUTH: ${DISABLE_AUTH}
+      SECRET_KEY: ${SECRET_KEY}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN}
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "${API_PORT_HOST:-8000}:8000"
+    restart: unless-stopped
+
+  client:
+    profiles: ["client"]
+    image: node:20-alpine
+    container_name: mailtrace-client
+    working_dir: /client
+    volumes:
+      - ../client:/client
+    command: sh -c "npm ci && npm run dev -- --host 0.0.0.0"
+    environment:
+      VITE_API_BASE: ${VITE_API_BASE}
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+
+  pgadmin:
+    profiles: ["tools"]
+    image: dpage/pgadmin4:8
+    container_name: mailtrace-pgadmin
+    env_file:
+      - .env
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD}
+    ports:
+      - "5050:80"
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata: {}

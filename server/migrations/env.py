@@ -16,8 +16,14 @@ from sqlalchemy.engine import make_url
 # Alembic config (must be set before using fileConfig / options)
 # ------------------------------------------------------------
 config = context.config
-if config.config_file_name:
-    fileConfig(config.config_file_name)
+config = context.config
+
+# Try root-level alembic.ini first; fall back to Alembic's default path; skip if missing
+project_root = Path(__file__).resolve().parents[1]  # .../server
+root_ini = project_root / "alembic.ini"
+ini_to_use = root_ini if root_ini.exists() else (Path(config.config_file_name) if config.config_file_name else None)
+if ini_to_use and ini_to_use.exists():
+    fileConfig(str(ini_to_use))
 logger = logging.getLogger("alembic.env")
 
 # ------------------------------------------------------------

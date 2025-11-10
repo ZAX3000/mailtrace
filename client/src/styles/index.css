@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
+/*@import "./figma-theme.css";*/
 @import "./tokens.css";
 @import "./theme-light.css";
 @import "./base.css";
 @import "./components.css";
-@import "./navbar.css";
+/*@import "./navbar.css";*/

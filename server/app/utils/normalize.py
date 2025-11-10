@@ -123,33 +123,61 @@ def build_full_address(
     z: Optional[str],
     addr2: Optional[str] = None,
 ) -> str:
+    """
+    Canonical full_address used across Mail & CRM.
+    - normalizes addr1 tokens (directionals, street types)
+    - squashes whitespace
+    - enforces ZIP-5 for stability
+    """
     a1 = normalize_address1(addr1 or "")
     parts = [
         a1,
         str(addr2 or "").strip(),
         str(city  or "").strip(),
         str(state or "").strip(),
-        str(z     or "").strip(),
+        zip5(z or ""),              # <-- use ZIP-5 here
     ]
-    return _squash_ws(" ".join(parts))
+    return _squash_ws(" ".join(parts)).lower()       # lower for stable hashing/compare
 
-def build_job_index(source_id: Optional[str],
-                    full_address: Optional[str],
-                    job_date: Optional[date]) -> Optional[str]:
+
+def build_mail_key(
+    source_id: Optional[str],
+    full_address: Optional[str],
+    sent_date: Optional[date],
+) -> Optional[str]:
     """
-    Rules:
-    - If source_id is present -> return cleaned source_id (as the canonical job_index).
-    - Else if both full_address and job_date present -> return a stable hash of
-      "<full_address_lower>|<YYYY-MM-DD>" with a short prefix.
-    - Else -> None (row can't be identified and should be skipped upstream).
+    MAIL identity:
+    - If source_id present → use it (canonical).
+    - Else if full_address & sent_date → stable hash mk_<16-hex>.
+    - Else → None (row should be skipped upstream).
     """
     sid = (source_id or "").strip()
     if sid:
-        return sid  # authoritative
+        return sid
+    if full_address and sent_date:
+        raw = f"{str(full_address).strip().lower()}|{sent_date.isoformat()}"
+        return "mk_" + hashlib.sha1(raw.encode("utf-8")).hexdigest()[:16]
+    return None
+
+
+def build_job_index(
+    source_id: Optional[str],
+    full_address: Optional[str],
+    job_date: Optional[date]
+) -> Optional[str]:
+    """
+    Canonical job key (user-scoped UNIQUE):
+      - If source_id present -> use it verbatim (authoritative)
+      - Else require BOTH full_address AND job_date (AND-semantics)
+      - Key is a short stable hash of "<full_address>|<YYYY-MM-DD>"
+    """
+    sid = (source_id or "").strip()
+    if sid:
+        return sid
 
     if full_address and job_date:
-        key = f"{str(full_address).strip().lower()}|{job_date.isoformat()}"
-        digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+        base = f"{str(full_address).strip().lower()}|{job_date.isoformat()}"
+        digest = hashlib.sha1(base.encode("utf-8")).hexdigest()[:16]
         return f"jid_{digest}"
 
     return None
